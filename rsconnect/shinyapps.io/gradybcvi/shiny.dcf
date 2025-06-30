@@ -1,0 +1,10 @@
+name: shiny
+title:
+username: gradybcvi
+account: gradybcvi
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 13029787
+bundleId: 10161690
+url: https://gradybcvi.shinyapps.io/shiny/
+version: 1
