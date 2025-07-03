@@ -829,31 +829,26 @@
     lasso_result$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "Y"),
     lasso_result_no_tot$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "N"),
     lasso_result_no_tot$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "N"),
-
     # Random Forest
     rf_result_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "Y"),
     rf_result_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "Y"),
     rf_result_no_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "N"),
     rf_result_no_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "N"),
-
     # XGBoost
     xgb_result_tot$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "Y"),
     xgb_result_tot$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "Y"),
     xgb_result_no_tot$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "N"),
     xgb_result_no_tot$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "N"),
-
     # SVM
     svm_result_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "Y"),
     svm_result_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "Y"),
     svm_result_no_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "N"),
     svm_result_no_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "N"),
-
     # GAM
     gam_result_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "Y"),
     gam_result_tot$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "Y"),
     gam_result_no_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "N"),
     gam_result_no_tot$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "N"),
-
     # MLP
     mlp_result_tot$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "Y"),
     mlp_result_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "Y"),
