@@ -623,7 +623,6 @@
 
         class_weights <- list(N = 1, Y = sum(y == "N") / sum(y == "Y"))
 
-        # Final (train) model
         model <- e1071::svm(
           x = X,
           y = y,
@@ -631,45 +630,28 @@
           probability = TRUE,
           kernel = "radial"
         )
-
         pred_prob <- attr(predict(model, X, probability = TRUE), "probabilities")[, "Y"]
         pred_class <- ifelse(pred_prob > 0.5, "Y", "N")
         confmat_train <- caret::confusionMatrix(factor(pred_class, levels = c("N", "Y")), y, positive = "Y")
         auc_train <- pROC::auc(y, pred_prob)
 
-        # CV model via caret to get predictions
-        ctrl <- caret::trainControl(
-          method = "repeatedcv",
-          number = 10,
-          repeats = 10,
-          classProbs = TRUE,
-          summaryFunction = twoClassSummary,
-          savePredictions = "final",
-          allowParallel = FALSE
-        )
-
+        # caret CV
         cv_result <- caret::train(
           x = X, y = y,
           method = "svmRadialWeights",
           weights = unname(unlist(class_weights[y])),
-          trControl = ctrl,
+          trControl = caret::trainControl(
+            method = "repeatedcv", number = 10, repeats = 10,
+            classProbs = TRUE, summaryFunction = twoClassSummary
+          ),
           metric = "ROC"
         )
-
-        best_sigma <- cv_result$bestTune$sigma
-        best_C <- cv_result$bestTune$C
-        svm_preds <- cv_result$pred %>%
-          filter(sigma == best_sigma, C == best_C)
-
-        truth_cv <- factor(svm_preds$obs, levels = c("N", "Y"))
-        pred_cv <- factor(svm_preds$pred, levels = c("N", "Y"))
-        prob_cv <- svm_preds$Y
-
-        confmat_cv <- caret::confusionMatrix(pred_cv, truth_cv, positive = "Y")
-        auc_cv <- pROC::auc(truth_cv, prob_cv)
+        prob_cv <- predict(cv_result, X, type = "prob")[, "Y"]
+        pred_cv <- ifelse(prob_cv > 0.5, "Y", "N")
+        confmat_cv <- caret::confusionMatrix(factor(pred_cv, levels = c("N", "Y")), y, positive = "Y")
+        auc_cv <- pROC::auc(y, prob_cv)
 
         list(
-          model = model,
           summary_train = tibble::tibble(
             Model = "SVM (Train Prediction, Optimistic)",
             AUC = as.numeric(auc_train),
@@ -702,7 +684,6 @@
         set.seed(seed)
         df[[response]] <- factor(df[[response]], levels = c("N", "Y"))
         y <- df[[response]]
-
         X <- df %>%
           select(-all_of(response)) %>%
           mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
@@ -714,19 +695,44 @@
           repeats = 10,
           classProbs = TRUE,
           summaryFunction = twoClassSummary,
+          sampling = "down",
           savePredictions = "final"
         )
 
         gam_fit <- caret::train(
-          x = X,
-          y = y,
+          x = X, y = y,
           method = "gam",
+          metric = "ROC",
           trControl = ctrl,
-          metric = "ROC"
+          tuneLength = 5
         )
 
+        prob_train <- predict(gam_fit, X, type = "prob")[, "Y"]
+        class_train <- predict(gam_fit, X)
+        confmat_train <- caret::confusionMatrix(class_train, y, positive = "Y")
+        auc_train <- pROC::auc(y, prob_train)
+
+        cv_preds <- gam_fit$pred %>%
+          filter(method == gam_fit$bestTune$method)
+        truth_cv <- factor(cv_preds$obs, levels = c("N", "Y"))
+        preds_cv <- factor(cv_preds$pred, levels = c("N", "Y"))
+        probs_cv <- cv_preds$Y
+        confmat_cv <- caret::confusionMatrix(preds_cv, truth_cv, positive = "Y")
+        auc_cv <- pROC::auc(truth_cv, probs_cv)
+
         list(
-          gam_fit = gam_fit
+          summary_train = tibble::tibble(
+            Model = "GAM (Train Prediction, Optimistic)",
+            AUC = as.numeric(auc_train),
+            Sensitivity = confmat_train$byClass["Sensitivity"],
+            Specificity = confmat_train$byClass["Specificity"]
+          ),
+          summary_cv = tibble::tibble(
+            Model = "GAM (CV Prediction, Realistic)",
+            AUC = as.numeric(auc_cv),
+            Sensitivity = confmat_cv$byClass["Sensitivity"],
+            Specificity = confmat_cv$byClass["Specificity"]
+          )
         )
       }
     #- 4.5.2: Run GAM with tot_inj
@@ -759,8 +765,7 @@
           classProbs = TRUE,
           summaryFunction = twoClassSummary,
           sampling = "down",
-          savePredictions = "final",
-          allowParallel = FALSE # <--- force single-threaded CV
+          savePredictions = "final"
         )
 
         mlp_fit <- caret::train(
@@ -818,12 +823,13 @@
       )
 #* 5: Compare all models
 #+ 5.1 Combine all model summaries, add youdens_j
-  # all_model_results <- bind_rows(
+  all_model_results <- bind_rows(
     # LASSO
     lasso_result$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "Y"),
     lasso_result$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "Y"),
     lasso_result_no_tot$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "N"),
     lasso_result_no_tot$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "N"),
+
     # Random Forest
     rf_result_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "Y"),
     rf_result_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "Y"),
@@ -837,10 +843,10 @@
     xgb_result_no_tot$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "N"),
 
     # SVM
-    svm_result_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "Y")
-    svm_result_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "Y")
-    svm_result_no_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "N")
-    svm_result_no_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "N")
+    svm_result_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "Y"),
+    svm_result_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "Y"),
+    svm_result_no_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "N"),
+    svm_result_no_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "N"),
 
     # GAM
     gam_result_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "Y"),
@@ -853,12 +859,12 @@
     mlp_result_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "Y"),
     mlp_result_no_tot$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "N"),
     mlp_result_no_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "N")
-
+  ) %>%
     mutate(across(c(AUC, Sensitivity, Specificity), ~ round(., 3))) %>%
     select(model, Prediction, total_inj_included, AUC, Sensitivity, Specificity) %>%
     mutate(
     youdens_j = Sensitivity + Specificity - 1
-  ) 
+  ) %>%
   mutate(Category = case_when(
     model == "LASSO" ~ "Penalized GLM",
     model == "Random Forest" ~ "Ensemble (bagging)",
@@ -867,7 +873,7 @@
     model == "SVM" ~ "Margin-based classifier",
     model == "MLP" ~ "Neural network",
     TRUE ~ NA_character_
-  )) 
+  )) %>%
   mutate(Feature_Selection = case_when(
     model == "LASSO" ~ "Built-in (penalty)",
     model == "Random Forest" ~ "Implicit (importance)",
@@ -894,84 +900,79 @@
     mutate(across(where(is.numeric), ~ round(.x, 2)))
   write.xlsx(table1, "model_comparison_no_tot_inj.xlsx")
 #+ 5.4 Construct ROC curves for all of those model.Selector(
-    #- 5.4.1 Define common 100-point grid for smoothed ROC
-      smoothed_points <- seq(0, 1, length.out = 100)
-    #- 5.4.2 Helper function to compute smoothed ROC curve
-      get_smoothed_roc <- function(truth, probs, model_name, smoothed_points = seq(0, 1, length.out = 100)) {
-        roc_curve <- pROC::roc(truth, probs, levels = c("N", "Y"), direction = "<")
-        smoothed_roc <- data.frame(
-          FPR = smoothed_points,
-          TPR = approx(1 - roc_curve$specificities, roc_curve$sensitivities, xout = smoothed_points)$y
-        )
-        smoothed_roc$Model <- model_name
-        smoothed_roc$AUC <- as.numeric(pROC::auc(roc_curve))
-        return(smoothed_roc)
-      }
-    #- 5.4.3 Compute smoothed ROC for each model
-      #_LASSO
-        lasso_roc <- get_smoothed_roc(
-          truth = factor(lasso_result_no_tot$preds_cv$truth, levels = c("N", "Y")),
-          probs = lasso_result_no_tot$preds_cv$prob,
-          model_name = "LASSO"
-        )
-      #_Random Forest
-        rf_roc <- get_smoothed_roc(
-          truth = factor(rf_result_no_tot$rf_fit$pred$obs, levels = c("N", "Y")),
-          probs = rf_result_no_tot$rf_fit$pred$Y,
-          model_name = "Random Forest"
-        )
-      #_GAM
-        gam_roc <- get_smoothed_roc(
-          truth = factor(gam_result_no_tot$gam_fit$pred$obs, levels = c("N", "Y")),
-          probs = gam_result_no_tot$gam_fit$pred$Y,
-          model_name = "GAM"
-        )
-      #_XGBoost
-        xgb_matrix <- xgboost::xgb.DMatrix(
-          data = rf_xgb_no_tots %>%
-            select(-stroke) %>%
-            mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
-            as.matrix()
-        )
-        xgb_probs <- predict(xgb_result_no_tot$final_model, xgb_matrix)
-        xgb_truth <- factor(rf_xgb_no_tots$stroke, levels = c("N", "Y"))
-        xgb_roc <- get_smoothed_roc(
-          truth = xgb_truth,
-          probs = xgb_probs,
-          model_name = "XGBoost"
-        )
-      #_SVM
-        X_svm <- rf_xgb_no_tots %>%
-          select(-stroke) %>%
-          mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
-          as.data.frame()
-        svm_probs <- attr(
-          predict(svm_result_no_tot$model, X_svm, probability = TRUE),
-          "probabilities"
-        )[, "Y"]
-        svm_truth <- factor(rf_xgb_no_tots$stroke, levels = c("N", "Y"))
-        svm_roc <- get_smoothed_roc(
-          truth = svm_truth,
-          probs = svm_probs,
-          model_name = "SVM"
-        )
-      #_MLP
-        best_size <- mlp_result_no_tot$mlp_fit$bestTune$size
-        mlp_preds <- mlp_result_no_tot$mlp_fit$pred %>%
-          filter(size == best_size)
-        mlp_roc <- get_smoothed_roc(
-          truth = factor(mlp_preds$obs, levels = c("N", "Y")),
-          probs = mlp_preds$Y,
-          model_name = "MLP"
-        )
-    #- 5.4.4: Combine all smoothed ROC curves and export for graphing in Prism
-      smoothed_rocs <- bind_rows(
-        lasso_roc,
-        rf_roc,
-        xgb_roc,
-        svm_roc,
-        gam_roc,
-        mlp_roc
-      ) %>%
-        select(Model,FPR,TPR,AUC)
-      write.csv(smoothed_rocs, "smoothed_roc_curves_no_tot_inj.csv", row.names = FALSE)
+#- 5.4.1 Define common 100-point grid for smoothed ROC
+  smoothed_points <- seq(0, 1, length.out = 100)
+#- 5.4.2 Helper function to compute smoothed ROC curve
+get_smoothed_roc <- function(truth, probs, model_name, smoothed_points = seq(0, 1, length.out = 100)) {
+  roc_curve <- pROC::roc(truth, probs, levels = c("N", "Y"), direction = "<")
+  smoothed_roc <- data.frame(
+    FPR = smoothed_points,
+    TPR = approx(1 - roc_curve$specificities, roc_curve$sensitivities, xout = smoothed_points)$y
+  )
+  smoothed_roc$Model <- model_name
+  smoothed_roc$AUC <- as.numeric(pROC::auc(roc_curve))
+  return(smoothed_roc)
+}
+#- 5.4.3 Compute smoothed ROC for each model
+# LASSO
+lasso_roc <- get_smoothed_roc(
+  truth = factor(lasso_result_no_tot$preds_cv$truth, levels = c("N", "Y")),
+  probs = lasso_result_no_tot$preds_cv$prob,
+  model_name = "LASSO"
+)
+
+# Random Forest
+rf_roc <- get_smoothed_roc(
+  truth = factor(rf_result_no_tot$rf_fit$pred$obs, levels = c("N", "Y")),
+  probs = rf_result_no_tot$rf_fit$pred$Y,
+  model_name = "Random Forest"
+)
+
+# XGBoost
+xgb_matrix <- xgboost::xgb.DMatrix(
+  data = rf_xgb_no_tots %>%
+    select(-stroke) %>%
+    mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
+    as.matrix()
+)
+xgb_probs <- predict(xgb_result_no_tot$final_model, xgb_matrix)
+xgb_truth <- factor(rf_xgb_no_tots$stroke, levels = c("N", "Y"))
+
+xgb_roc <- get_smoothed_roc(
+  truth = xgb_truth,
+  probs = xgb_probs,
+  model_name = "XGBoost"
+)
+
+# SVM
+svm_roc <- get_smoothed_roc(
+  truth = factor(rf_xgb_no_tots$stroke, levels = c("N", "Y")),
+  probs = attr(predict(
+    svm_result_no_tot$model,
+    rf_xgb_no_tots %>% select(-stroke),
+    probability = TRUE
+  ), "probabilities")[, "Y"],
+  model_name = "SVM"
+)
+
+# GAM
+gam_roc <- get_smoothed_roc(
+  truth = factor(gam_result_no_tot$gam_fit$pred$obs, levels = c("N", "Y")),
+  probs = gam_result_no_tot$gam_fit$pred$Y,
+  model_name = "GAM"
+)
+
+# MLP
+mlp_roc <- get_smoothed_roc(
+  truth = factor(mlp_result_no_tot$mlp_fit$pred$obs, levels = c("N", "Y")),
+  probs = mlp_result_no_tot$mlp_fit$pred$Y,
+  model_name = "MLP"
+)
+smoothed_rocs <- bind_rows(
+  lasso_roc,
+  rf_roc,
+  xgb_roc,
+  svm_roc,
+  gam_roc,
+  mlp_roc
+)
