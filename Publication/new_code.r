@@ -4,7 +4,7 @@
 #* 0: Dependencies and setting seeds
   #+ 0.1: Dependencies
     #- 0.1.1 Install all packages
-      install.packages(c("bartMachine","broom", "caret", "glmnet", "kernlab", "knitr", "mice", "pROC", "randomForest", "readxl", "tibble", "tidyverse", "xgboost"))
+      install.packages(c("broom", "caret", "glmnet", "kernlab", "knitr", "mice", "pROC", "randomForest", "readxl", "RSNNS", "tibble", "tidyverse", "xgboost"))
     #- 0.1.2: Load libraries
       library(tidyverse)
       library(readxl)
@@ -17,7 +17,7 @@
       library(broom)
       library(knitr)
       library(kernlab)
-      library(bartMachine)
+      library(RSNNS)
   #+ 0.2: Set seeds
     set.seed(2025)
     my_seeds_rf <- c(replicate(100, sample.int(1000, 5), simplify = FALSE), list(sample.int(1000, 1)))
@@ -335,54 +335,56 @@
   #+ 4.1 LASSO (variable selection and model fitting)
     #- 4.1.1: Write a full pipeline function to run LASSO
       run_lasso_analysis <- function(data, model_label = "LASSO") {
-        # Prepare outcome and predictors
         y <- data$stroke
         X <- data %>%
           select(-stroke, -c(Max_LC:Max_VB), -ID) %>%
           mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
           as.matrix()
         y_bin <- as.numeric(y == "Y")
-
-        # Class weights
         class_weights <- ifelse(y == "Y", sum(y == "N") / sum(y == "Y"), 1)
 
-        # Repeated CV
-        lasso_repeat_results <- purrr::map_dfr(1:10, function(i) {
+        # Store out-of-fold predictions
+        oof_preds <- purrr::map_dfr(1:10, function(i) {
           set.seed(2025 + i)
           foldid <- caret::createFolds(y, k = 10, list = FALSE)
-          lasso_fit <- glmnet::cv.glmnet(
-            x = X,
-            y = y_bin,
-            family = "binomial",
-            alpha = 1,
-            type.measure = "auc",
-            foldid = foldid,
-            weights = class_weights
-          )
-          lasso_prob <- predict(lasso_fit, newx = X, s = "lambda.min", type = "response")
-          lasso_pred <- ifelse(lasso_prob > 0.5, "Y", "N")
-          truth <- factor(y, levels = c("N", "Y"))
-          confmat <- caret::confusionMatrix(factor(lasso_pred, levels = c("N", "Y")), truth, positive = "Y")
-          auc_val <- as.numeric(pROC::auc(truth, as.vector(lasso_prob)))
-          tibble::tibble(
-            rep = i,
-            lambda_min = lasso_fit$lambda.min,
-            AUC = auc_val,
-            Sensitivity = confmat$byClass["Sensitivity"],
-            Specificity = confmat$byClass["Specificity"]
-          )
+
+          purrr::map_dfr(1:10, function(k) {
+            test_idx <- which(foldid == k)
+            train_idx <- which(foldid != k)
+
+            lasso_fit <- glmnet::cv.glmnet(
+              x = X[train_idx, ],
+              y = y_bin[train_idx],
+              family = "binomial",
+              alpha = 1,
+              type.measure = "auc",
+              weights = class_weights[train_idx]
+            )
+
+            test_probs <- predict(lasso_fit, newx = X[test_idx, ], s = "lambda.min", type = "response")
+            tibble(
+              prob = as.vector(test_probs),
+              truth = y[test_idx],
+              rep = i,
+              fold = k
+            )
+          })
         })
 
-        # CV summary (realistic)
-        summary_cv <- lasso_repeat_results %>%
-          summarise(
-            Model = paste(model_label, "(CV Prediction, Realistic)"),
-            AUC = mean(AUC),
-            Sensitivity = mean(Sensitivity),
-            Specificity = mean(Specificity)
-          )
+        # Cross-validated ROC curve object
+        roc_cv <- pROC::roc(factor(oof_preds$truth, levels = c("N", "Y")), oof_preds$prob)
 
-        # Final model on all data
+        # CV summary stats
+        youden_j <- pROC::coords(roc_cv, "best", ret = "youden", transpose = FALSE)
+        summary_cv <- tibble(
+          Model = paste(model_label, "(CV Prediction, Realistic)"),
+          AUC = as.numeric(pROC::auc(roc_cv)),
+          Sensitivity = youden_j$sensitivity,
+          Specificity = youden_j$specificity,
+          YoudensJ = youden_j$youden
+        )
+
+        # Final (train/optimistic) model
         final_foldid <- caret::createFolds(y, k = 10, list = FALSE)
         lasso_fit_final <- glmnet::cv.glmnet(
           x = X,
@@ -393,22 +395,20 @@
           foldid = final_foldid,
           weights = class_weights
         )
-
-        # Optimistic performance
         lasso_probs_train <- predict(lasso_fit_final, newx = X, s = "lambda.min", type = "response")
         lasso_preds_train <- ifelse(lasso_probs_train > 0.5, "Y", "N")
         truth_train <- factor(y, levels = c("N", "Y"))
         confmat_train <- caret::confusionMatrix(factor(lasso_preds_train, levels = c("N", "Y")), truth_train, positive = "Y")
         auc_train <- as.numeric(pROC::auc(truth_train, as.vector(lasso_probs_train)))
 
-        summary_optimistic <- tibble::tibble(
+        summary_train <- tibble(
           Model = paste(model_label, "(Train Prediction, Optimistic)"),
           AUC = auc_train,
           Sensitivity = confmat_train$byClass["Sensitivity"],
           Specificity = confmat_train$byClass["Specificity"]
         )
 
-        # Coefficients
+        # Selected variables
         lasso_coefs <- coef(lasso_fit_final, s = "lambda.min")
         selected_vars <- as.matrix(lasso_coefs) %>%
           as.data.frame() %>%
@@ -416,11 +416,12 @@
           dplyr::rename(Coefficient = s1) %>%
           dplyr::filter(Coefficient != 0)
 
-        # Output list
         return(list(
-          summary_train = summary_optimistic,
+          summary_train = summary_train,
           summary_cv = summary_cv,
-          selected_variables = selected_vars
+          selected_variables = selected_vars,
+          roc_curve_cv = roc_cv,
+          preds_cv = oof_preds # optional: for external plotting
         ))
       }
     #- 4.1.2: Run version WITH tot inj
@@ -622,6 +623,7 @@
 
         class_weights <- list(N = 1, Y = sum(y == "N") / sum(y == "Y"))
 
+        # Final (train) model
         model <- e1071::svm(
           x = X,
           y = y,
@@ -629,28 +631,45 @@
           probability = TRUE,
           kernel = "radial"
         )
+
         pred_prob <- attr(predict(model, X, probability = TRUE), "probabilities")[, "Y"]
         pred_class <- ifelse(pred_prob > 0.5, "Y", "N")
         confmat_train <- caret::confusionMatrix(factor(pred_class, levels = c("N", "Y")), y, positive = "Y")
         auc_train <- pROC::auc(y, pred_prob)
 
-        # caret CV
+        # CV model via caret to get predictions
+        ctrl <- caret::trainControl(
+          method = "repeatedcv",
+          number = 10,
+          repeats = 10,
+          classProbs = TRUE,
+          summaryFunction = twoClassSummary,
+          savePredictions = "final",
+          allowParallel = FALSE
+        )
+
         cv_result <- caret::train(
           x = X, y = y,
           method = "svmRadialWeights",
           weights = unname(unlist(class_weights[y])),
-          trControl = caret::trainControl(
-            method = "repeatedcv", number = 10, repeats = 10,
-            classProbs = TRUE, summaryFunction = twoClassSummary
-          ),
+          trControl = ctrl,
           metric = "ROC"
         )
-        prob_cv <- predict(cv_result, X, type = "prob")[, "Y"]
-        pred_cv <- ifelse(prob_cv > 0.5, "Y", "N")
-        confmat_cv <- caret::confusionMatrix(factor(pred_cv, levels = c("N", "Y")), y, positive = "Y")
-        auc_cv <- pROC::auc(y, prob_cv)
+
+        best_sigma <- cv_result$bestTune$sigma
+        best_C <- cv_result$bestTune$C
+        svm_preds <- cv_result$pred %>%
+          filter(sigma == best_sigma, C == best_C)
+
+        truth_cv <- factor(svm_preds$obs, levels = c("N", "Y"))
+        pred_cv <- factor(svm_preds$pred, levels = c("N", "Y"))
+        prob_cv <- svm_preds$Y
+
+        confmat_cv <- caret::confusionMatrix(pred_cv, truth_cv, positive = "Y")
+        auc_cv <- pROC::auc(truth_cv, prob_cv)
 
         list(
+          model = model,
           summary_train = tibble::tibble(
             Model = "SVM (Train Prediction, Optimistic)",
             AUC = as.numeric(auc_train),
@@ -677,90 +696,54 @@
         response = "stroke",
         seed = 2025
       )
-  #+ 4.5: BART model fitting
-    #- 4.5.1: Write full pipeline function to run BART
-      run_bart_model <- function(df, response = "stroke", seed = 2025) {
+  #+ 4.5: GAM model fitting
+    #- 4.5.1: Write full pipeline function to run GAM
+      run_gam_model <- function(df, response = "stroke", seed = 2025) {
         set.seed(seed)
-
-        # Step 1: Format response
         df[[response]] <- factor(df[[response]], levels = c("N", "Y"))
         y <- df[[response]]
 
-        # Step 2: Format predictors
         X <- df %>%
           select(-all_of(response)) %>%
           mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
           as.data.frame()
 
-        # Step 3: Fit on full data
-        train_model <- bartMachine::bartMachine(
-          X = X,
-          y = as.numeric(y == "Y"),
-          seed = seed,
-          num_trees = 50,
-          verbose = FALSE
+        ctrl <- caret::trainControl(
+          method = "repeatedcv",
+          number = 10,
+          repeats = 10,
+          classProbs = TRUE,
+          summaryFunction = twoClassSummary,
+          savePredictions = "final"
         )
-        train_prob <- predict(train_model, X)
-        train_pred <- ifelse(train_prob > 0.5, "Y", "N")
-        truth <- y
-        confmat_train <- caret::confusionMatrix(factor(train_pred, levels = c("N", "Y")), truth, positive = "Y")
-        auc_train <- pROC::auc(truth, train_prob)
 
-        # Step 4: Manual repeated 10x10 CV
-        folds <- caret::createMultiFolds(y, k = 10, times = 10)
-        prob_cv <- rep(NA, nrow(X))
-        i <- 1
-
-        for (fold_name in names(folds)) {
-          cat("Running BART CV model", i, "of", length(folds), "...\n")
-          train_idx <- folds[[fold_name]]
-          test_idx <- setdiff(seq_len(nrow(X)), train_idx)
-
-          bart_cv <- bartMachine::bartMachine(
-            X = X[train_idx, ],
-            y = as.numeric(y[train_idx] == "Y"),
-            seed = seed + i,
-            num_trees = 50,
-            verbose = FALSE
-          )
-          prob_cv[test_idx] <- predict(bart_cv, X[test_idx, ])
-          i <- i + 1
-        }
-
-        pred_class_cv <- ifelse(prob_cv > 0.5, "Y", "N")
-        confmat_cv <- caret::confusionMatrix(factor(pred_class_cv, levels = c("N", "Y")), truth, positive = "Y")
-        auc_cv <- pROC::auc(truth, prob_cv)
+        gam_fit <- caret::train(
+          x = X,
+          y = y,
+          method = "gam",
+          trControl = ctrl,
+          metric = "ROC"
+        )
 
         list(
-          summary_train = tibble::tibble(
-            Model = "BART (Train Prediction, Optimistic)",
-            AUC = as.numeric(auc_train),
-            Sensitivity = confmat_train$byClass["Sensitivity"],
-            Specificity = confmat_train$byClass["Specificity"]
-          ),
-          summary_cv = tibble::tibble(
-            Model = "BART (CV Prediction, Realistic)",
-            AUC = as.numeric(auc_cv),
-            Sensitivity = confmat_cv$byClass["Sensitivity"],
-            Specificity = confmat_cv$byClass["Specificity"]
-          )
+          gam_fit = gam_fit
         )
       }
-    #- 4.5.2: Run BART with tot_inj
-      bart_result_tot <- run_bart_model(
+    #- 4.5.2: Run GAM with tot_inj
+      gam_result_tot <- run_gam_model(
         df = rf_xgb,
         response = "stroke",
         seed = 2025
       )
-    #- 4.5.3: Run BART without tot_inj
-      bart_result_no_tot <- run_bart_model(
+    #- 4.5.3: Run GAM without tot_inj
+      gam_result_no_tot <- run_gam_model(
         df = rf_xgb_no_tots,
         response = "stroke",
         seed = 2025
       )
-  #+ 4.6: Oblique RF model fitting
-    #- 4.6.1: Write full pipeline function to run Oblique RF
-      run_oblique_rf_model <- function(df, response = "stroke", seed = 2025) {
+  #+ 4.6: MLP model fitting
+    #- 4.6.1: Write full pipeline function to run MLP
+      run_mlp_model <- function(df, response = "stroke", seed = 2025) {
         set.seed(seed)
         df[[response]] <- factor(df[[response]], levels = c("N", "Y"))
         y <- df[[response]]
@@ -769,52 +752,226 @@
           mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
           as.data.frame()
 
-        model <- obliqueRF::obliqueRF(X, y, training_method = "svm", ntree = 500)
-        prob_train <- predict(model, X, type = "prob")[, "Y"]
-        pred_train <- ifelse(prob_train > 0.5, "Y", "N")
-        truth <- y
-        confmat_train <- caret::confusionMatrix(factor(pred_train, levels = c("N", "Y")), truth, positive = "Y")
-        auc_train <- pROC::auc(truth, prob_train)
-
-        # No CV in package, but can wrap in caret
-        cv_result <- caret::train(
-          x = X, y = y,
-          method = "ORFsvm",
-          trControl = caret::trainControl(
-            method = "repeatedcv", number = 10, repeats = 10,
-            classProbs = TRUE, summaryFunction = twoClassSummary
-          ),
-          metric = "ROC"
+        ctrl <- caret::trainControl(
+          method = "repeatedcv",
+          number = 10,
+          repeats = 10,
+          classProbs = TRUE,
+          summaryFunction = twoClassSummary,
+          sampling = "down",
+          savePredictions = "final",
+          allowParallel = FALSE # <--- force single-threaded CV
         )
-        prob_cv <- predict(cv_result, X, type = "prob")[, "Y"]
-        pred_cv <- ifelse(prob_cv > 0.5, "Y", "N")
-        confmat_cv <- caret::confusionMatrix(factor(pred_cv, levels = c("N", "Y")), truth, positive = "Y")
-        auc_cv <- pROC::auc(truth, prob_cv)
+
+        mlp_fit <- caret::train(
+          x = X,
+          y = y,
+          method = "nnet", # <--- safer
+          metric = "ROC",
+          trControl = ctrl,
+          tuneLength = 5,
+          trace = FALSE
+        )
+
+        # Optimistic
+        prob_train <- predict(mlp_fit, X, type = "prob")[, "Y"]
+        class_train <- predict(mlp_fit, X)
+        confmat_train <- caret::confusionMatrix(class_train, y, positive = "Y")
+        auc_train <- pROC::auc(y, prob_train)
+
+        # Realistic (from saved CV predictions)
+        cv_preds <- mlp_fit$pred %>%
+          filter(size == mlp_fit$bestTune$size)
+        truth_cv <- factor(cv_preds$obs, levels = c("N", "Y"))
+        preds_cv <- factor(cv_preds$pred, levels = c("N", "Y"))
+        probs_cv <- cv_preds$Y
+        confmat_cv <- caret::confusionMatrix(preds_cv, truth_cv, positive = "Y")
+        auc_cv <- pROC::auc(truth_cv, probs_cv)
 
         list(
           summary_train = tibble::tibble(
-            Model = "ObliqueRF (Train Prediction, Optimistic)",
+            Model = "MLP (Train Prediction, Optimistic)",
             AUC = as.numeric(auc_train),
             Sensitivity = confmat_train$byClass["Sensitivity"],
             Specificity = confmat_train$byClass["Specificity"]
           ),
           summary_cv = tibble::tibble(
-            Model = "ObliqueRF (CV Prediction, Realistic)",
+            Model = "MLP (CV Prediction, Realistic)",
             AUC = as.numeric(auc_cv),
             Sensitivity = confmat_cv$byClass["Sensitivity"],
             Specificity = confmat_cv$byClass["Specificity"]
-          )
+          ),
+          mlp_fit = mlp_fit # <--- ADD THIS LINE
         )
       }
-    #- 4.6.2: Run Oblique RF with tot_inj
-      oblique_rf_result_tot <- run_oblique_rf_model(
+    #- 4.6.2: Run MLP with tot_inj
+      mlp_result_tot <- run_mlp_model(
         df = rf_xgb,
         response = "stroke",
         seed = 2025
       )
-    #- 4.6.3: Run Oblique RF without tot_inj
-    oblique_rf_result_no_tot <- run_oblique_rf_model(
-      df = rf_xgb_no_tots,
-      response = "stroke",
-      seed = 2025
-    )
+    #- 4.6.3: Run MLP without tot_inj
+      mlp_result_no_tot <- run_mlp_model(
+        df = rf_xgb_no_tots,
+        response = "stroke",
+        seed = 2025
+      )
+#* 5: Compare all models
+#+ 5.1 Combine all model summaries, add youdens_j
+  # all_model_results <- bind_rows(
+    # LASSO
+    lasso_result$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "Y"),
+    lasso_result$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "Y"),
+    lasso_result_no_tot$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "N"),
+    lasso_result_no_tot$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "N"),
+    # Random Forest
+    rf_result_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "Y"),
+    rf_result_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "Y"),
+    rf_result_no_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "N"),
+    rf_result_no_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "N"),
+
+    # XGBoost
+    xgb_result_tot$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "Y"),
+    xgb_result_tot$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "Y"),
+    xgb_result_no_tot$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "N"),
+    xgb_result_no_tot$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "N"),
+
+    # SVM
+    svm_result_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "Y")
+    svm_result_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "Y")
+    svm_result_no_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "N")
+    svm_result_no_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "N")
+
+    # GAM
+    gam_result_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "Y"),
+    gam_result_tot$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "Y"),
+    gam_result_no_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "N"),
+    gam_result_no_tot$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "N"),
+
+    # MLP
+    mlp_result_tot$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "Y"),
+    mlp_result_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "Y"),
+    mlp_result_no_tot$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "N"),
+    mlp_result_no_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "N")
+
+    mutate(across(c(AUC, Sensitivity, Specificity), ~ round(., 3))) %>%
+    select(model, Prediction, total_inj_included, AUC, Sensitivity, Specificity) %>%
+    mutate(
+    youdens_j = Sensitivity + Specificity - 1
+  ) 
+  mutate(Category = case_when(
+    model == "LASSO" ~ "Penalized GLM",
+    model == "Random Forest" ~ "Ensemble (bagging)",
+    model == "GAM" ~ "Additive spline model",
+    model == "XGBoost" ~ "Ensemble (boosting)",
+    model == "SVM" ~ "Margin-based classifier",
+    model == "MLP" ~ "Neural network",
+    TRUE ~ NA_character_
+  )) 
+  mutate(Feature_Selection = case_when(
+    model == "LASSO" ~ "Built-in (penalty)",
+    model == "Random Forest" ~ "Implicit (importance)",
+    model == "GAM" ~ "None",
+    model == "XGBoost" ~ "Implicit (importance)",
+    model == "SVM" ~ "None",
+    model == "MLP" ~ "None",
+    TRUE ~ NA_character_
+  )) 
+#+ 5.2 Break them into CV vs train
+  #- 5.2.1: CV results
+    all_model_results_cv <- all_model_results %>%
+      filter(Prediction == "CV") %>%
+      select(-Prediction) %>%
+      arrange(desc(youdens_j))
+  #- 5.2.2: Train results
+    all_model_results_train <- all_model_results %>%
+      filter(Prediction == "Train") %>%
+      select(-Prediction)
+#+ 5.3 Now make a excluded total_inj and export
+  table1 <- all_model_results_cv %>%
+    filter(total_inj_included == "N") %>%
+    select(model,Category,Feature_Selection,youdens_j, everything(),-total_inj_included) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 2)))
+  write.xlsx(table1, "model_comparison_no_tot_inj.xlsx")
+#+ 5.4 Construct ROC curves for all of those model.Selector(
+    #- 5.4.1 Define common 100-point grid for smoothed ROC
+      smoothed_points <- seq(0, 1, length.out = 100)
+    #- 5.4.2 Helper function to compute smoothed ROC curve
+      get_smoothed_roc <- function(truth, probs, model_name, smoothed_points = seq(0, 1, length.out = 100)) {
+        roc_curve <- pROC::roc(truth, probs, levels = c("N", "Y"), direction = "<")
+        smoothed_roc <- data.frame(
+          FPR = smoothed_points,
+          TPR = approx(1 - roc_curve$specificities, roc_curve$sensitivities, xout = smoothed_points)$y
+        )
+        smoothed_roc$Model <- model_name
+        smoothed_roc$AUC <- as.numeric(pROC::auc(roc_curve))
+        return(smoothed_roc)
+      }
+    #- 5.4.3 Compute smoothed ROC for each model
+      #_LASSO
+        lasso_roc <- get_smoothed_roc(
+          truth = factor(lasso_result_no_tot$preds_cv$truth, levels = c("N", "Y")),
+          probs = lasso_result_no_tot$preds_cv$prob,
+          model_name = "LASSO"
+        )
+      #_Random Forest
+        rf_roc <- get_smoothed_roc(
+          truth = factor(rf_result_no_tot$rf_fit$pred$obs, levels = c("N", "Y")),
+          probs = rf_result_no_tot$rf_fit$pred$Y,
+          model_name = "Random Forest"
+        )
+      #_GAM
+        gam_roc <- get_smoothed_roc(
+          truth = factor(gam_result_no_tot$gam_fit$pred$obs, levels = c("N", "Y")),
+          probs = gam_result_no_tot$gam_fit$pred$Y,
+          model_name = "GAM"
+        )
+      #_XGBoost
+        xgb_matrix <- xgboost::xgb.DMatrix(
+          data = rf_xgb_no_tots %>%
+            select(-stroke) %>%
+            mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
+            as.matrix()
+        )
+        xgb_probs <- predict(xgb_result_no_tot$final_model, xgb_matrix)
+        xgb_truth <- factor(rf_xgb_no_tots$stroke, levels = c("N", "Y"))
+        xgb_roc <- get_smoothed_roc(
+          truth = xgb_truth,
+          probs = xgb_probs,
+          model_name = "XGBoost"
+        )
+      #_SVM
+        X_svm <- rf_xgb_no_tots %>%
+          select(-stroke) %>%
+          mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
+          as.data.frame()
+        svm_probs <- attr(
+          predict(svm_result_no_tot$model, X_svm, probability = TRUE),
+          "probabilities"
+        )[, "Y"]
+        svm_truth <- factor(rf_xgb_no_tots$stroke, levels = c("N", "Y"))
+        svm_roc <- get_smoothed_roc(
+          truth = svm_truth,
+          probs = svm_probs,
+          model_name = "SVM"
+        )
+      #_MLP
+        best_size <- mlp_result_no_tot$mlp_fit$bestTune$size
+        mlp_preds <- mlp_result_no_tot$mlp_fit$pred %>%
+          filter(size == best_size)
+        mlp_roc <- get_smoothed_roc(
+          truth = factor(mlp_preds$obs, levels = c("N", "Y")),
+          probs = mlp_preds$Y,
+          model_name = "MLP"
+        )
+    #- 5.4.4: Combine all smoothed ROC curves and export for graphing in Prism
+      smoothed_rocs <- bind_rows(
+        lasso_roc,
+        rf_roc,
+        xgb_roc,
+        svm_roc,
+        gam_roc,
+        mlp_roc
+      ) %>%
+        select(Model,FPR,TPR,AUC)
+      write.csv(smoothed_rocs, "smoothed_roc_curves_no_tot_inj.csv", row.names = FALSE)
