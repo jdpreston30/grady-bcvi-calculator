@@ -1,10 +1,13 @@
 #! Issue 1 (bookmarked): Check with Tori on this!!! Are we going to define multifocal as more than one in a location or in a side... this is not how we did it previously.
 #! Issue 2: When combining models, we need to make multifocal a basilar here
 #! Issue 3: How do we deal with the IRs?
+#! Contents
+  #! Table 1 is created in section 5.3
+  #! Suppl. Table 1 is created in section 5.4
 #* 0: Dependencies and setting seeds
   #+ 0.1: Dependencies
-    #- 0.1.1 Install all packages
-      install.packages(c("broom", "caret", "glmnet", "kernlab", "knitr", "mice", "pROC", "randomForest", "readxl", "RSNNS", "tibble", "tidyverse", "xgboost"))
+    #- 0.1.1: Install all packages
+      install.packages(c("broom", "caret", "glmnet", "kernlab", "knitr", "mice", "pROC","PRROC", "randomForest", "readxl", "RSNNS", "tibble", "tidyverse", "xgboost"))
     #- 0.1.2: Load libraries
       library(tidyverse)
       library(readxl)
@@ -18,11 +21,12 @@
       library(knitr)
       library(kernlab)
       library(RSNNS)
+      library(PRROC)
   #+ 0.2: Set seeds
     set.seed(2025)
     my_seeds_rf <- c(replicate(100, sample.int(1000, 5), simplify = FALSE), list(sample.int(1000, 1)))
 #* 1: Data import, preprocess and clean
-  #+ 1.0 Skip data import below and just load RDS
+  #+ 1.0: Skip data import below and just load RDS
     list2env(readRDS("/Users/jdp2019/Library/CloudStorage/OneDrive-Emory/Research/Manuscripts and Projects/Grady/Risk Calculator/Raw Data/all_objects.rds"), envir = .GlobalEnv)
   #+ 1.1: Import data
     raw_path <- "/Users/jdp2019/Library/CloudStorage/OneDrive-Emory/Research/Manuscripts and Projects/Grady/Risk Calculator/Raw Data/merged_data_DI.xlsx"
@@ -332,59 +336,59 @@
       select(stroke:age, max_vert, max_carotid,ID,tot_vert_inj,tot_carotid_inj) %>%
       left_join(raw_iii %>% select(ID, Max_LC:Max_VB), by = "ID")
 #* 4: Test multiple methods and compare performance
-  #+ 4.1 LASSO (variable selection and model fitting)
+  #+ 4.1: LASSO (variable selection and model fitting)
     #- 4.1.1: Write a full pipeline function to run LASSO
       run_lasso_analysis <- function(data, model_label = "LASSO") {
+        # Prepare outcome and predictors
         y <- data$stroke
         X <- data %>%
           select(-stroke, -c(Max_LC:Max_VB), -ID) %>%
           mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
           as.matrix()
         y_bin <- as.numeric(y == "Y")
+
+        # Class weights
         class_weights <- ifelse(y == "Y", sum(y == "N") / sum(y == "Y"), 1)
 
-        # Store out-of-fold predictions
-        oof_preds <- purrr::map_dfr(1:10, function(i) {
+        # Repeated CV
+        lasso_repeat_results <- purrr::map_dfr(1:10, function(i) {
           set.seed(2025 + i)
           foldid <- caret::createFolds(y, k = 10, list = FALSE)
-
-          purrr::map_dfr(1:10, function(k) {
-            test_idx <- which(foldid == k)
-            train_idx <- which(foldid != k)
-
-            lasso_fit <- glmnet::cv.glmnet(
-              x = X[train_idx, ],
-              y = y_bin[train_idx],
-              family = "binomial",
-              alpha = 1,
-              type.measure = "auc",
-              weights = class_weights[train_idx]
-            )
-
-            test_probs <- predict(lasso_fit, newx = X[test_idx, ], s = "lambda.min", type = "response")
-            tibble(
-              prob = as.vector(test_probs),
-              truth = y[test_idx],
-              rep = i,
-              fold = k
-            )
-          })
+          lasso_fit <- glmnet::cv.glmnet(
+            x = X,
+            y = y_bin,
+            family = "binomial",
+            alpha = 1,
+            type.measure = "auc",
+            foldid = foldid,
+            weights = class_weights
+          )
+          lasso_prob <- predict(lasso_fit, newx = X, s = "lambda.min", type = "response")
+          lasso_pred <- ifelse(lasso_prob > 0.5, "Y", "N")
+          truth <- factor(y, levels = c("N", "Y"))
+          confmat <- caret::confusionMatrix(factor(lasso_pred, levels = c("N", "Y")), truth, positive = "Y")
+          auc_val <- as.numeric(pROC::auc(truth, as.vector(lasso_prob)))
+          tibble::tibble(
+            rep = i,
+            lambda_min = lasso_fit$lambda.min,
+            AUC = auc_val,
+            Sensitivity = confmat$byClass["Sensitivity"],
+            Specificity = confmat$byClass["Specificity"],
+            truth = as.character(truth),
+            prob = as.vector(lasso_prob)
+          )
         })
 
-        # Cross-validated ROC curve object
-        roc_cv <- pROC::roc(factor(oof_preds$truth, levels = c("N", "Y")), oof_preds$prob)
+        # CV summary (realistic)
+        summary_cv <- lasso_repeat_results %>%
+          summarise(
+            Model = paste(model_label, "(CV Prediction, Realistic)"),
+            AUC = mean(AUC),
+            Sensitivity = mean(Sensitivity),
+            Specificity = mean(Specificity)
+          )
 
-        # CV summary stats
-        youden_j <- pROC::coords(roc_cv, "best", ret = "youden", transpose = FALSE)
-        summary_cv <- tibble(
-          Model = paste(model_label, "(CV Prediction, Realistic)"),
-          AUC = as.numeric(pROC::auc(roc_cv)),
-          Sensitivity = youden_j$sensitivity,
-          Specificity = youden_j$specificity,
-          YoudensJ = youden_j$youden
-        )
-
-        # Final (train/optimistic) model
+        # Final model on all data
         final_foldid <- caret::createFolds(y, k = 10, list = FALSE)
         lasso_fit_final <- glmnet::cv.glmnet(
           x = X,
@@ -395,20 +399,22 @@
           foldid = final_foldid,
           weights = class_weights
         )
+
+        # Optimistic performance
         lasso_probs_train <- predict(lasso_fit_final, newx = X, s = "lambda.min", type = "response")
         lasso_preds_train <- ifelse(lasso_probs_train > 0.5, "Y", "N")
         truth_train <- factor(y, levels = c("N", "Y"))
         confmat_train <- caret::confusionMatrix(factor(lasso_preds_train, levels = c("N", "Y")), truth_train, positive = "Y")
         auc_train <- as.numeric(pROC::auc(truth_train, as.vector(lasso_probs_train)))
 
-        summary_train <- tibble(
+        summary_optimistic <- tibble::tibble(
           Model = paste(model_label, "(Train Prediction, Optimistic)"),
           AUC = auc_train,
           Sensitivity = confmat_train$byClass["Sensitivity"],
           Specificity = confmat_train$byClass["Specificity"]
         )
 
-        # Selected variables
+        # Coefficients
         lasso_coefs <- coef(lasso_fit_final, s = "lambda.min")
         selected_vars <- as.matrix(lasso_coefs) %>%
           as.data.frame() %>%
@@ -416,19 +422,20 @@
           dplyr::rename(Coefficient = s1) %>%
           dplyr::filter(Coefficient != 0)
 
+        # Output list
         return(list(
-          summary_train = summary_train,
+          summary_train = summary_optimistic,
           summary_cv = summary_cv,
           selected_variables = selected_vars,
-          roc_curve_cv = roc_cv,
-          preds_cv = oof_preds # optional: for external plotting
+          preds_cv = lasso_repeat_results %>%
+            select(truth, prob) # <- this line is key
         ))
       }
     #- 4.1.2: Run version WITH tot inj
       lasso_result <- run_lasso_analysis(data = ml_modeling_data, model_label = "LASSO")
     #- 4.1.3: Version WITHOUT tot_inj
       lasso_result_no_tot <- run_lasso_analysis(data = ml_modeling_data %>% select(-c(tot_vert_inj, tot_carotid_inj)), model_label = "LASSO (no tot_inj)")
-  #+ 4.2 Random Forest model fitting
+  #+ 4.2: Random Forest model fitting
     #- 4.2.1: Set up data for random forest and xgb later
       #_With tot variable
         rf_xgb <- ml_modeling_data %>%
@@ -507,7 +514,7 @@
         model_label = "Random Forest (No tot_inj)",
         my_seeds = my_seeds_rf
       )
-  #+ 4.3 Gradient Boosting model fitting
+  #+ 4.3: Gradient Boosting model fitting
     #- 4.3.1: Write full pipeline function to run XGBoost
       run_xgb_analysis <- function(data, model_label = "XGBoost", repeats = 10, folds = 10, seed_base = 2025) {
         # Prepare data
@@ -650,8 +657,7 @@
         pred_cv <- ifelse(prob_cv > 0.5, "Y", "N")
         confmat_cv <- caret::confusionMatrix(factor(pred_cv, levels = c("N", "Y")), y, positive = "Y")
         auc_cv <- pROC::auc(y, prob_cv)
-
-        list(
+        return(list(
           summary_train = tibble::tibble(
             Model = "SVM (Train Prediction, Optimistic)",
             AUC = as.numeric(auc_train),
@@ -663,8 +669,8 @@
             AUC = as.numeric(auc_cv),
             Sensitivity = confmat_cv$byClass["Sensitivity"],
             Specificity = confmat_cv$byClass["Specificity"]
-          )
-        )
+          ),
+          model = model)) # This must be present to be able to get ROC later
       }
     #- 4.4.2: Run SVM with tot_inj
       svm_result_tot <- run_svm_model(
@@ -672,7 +678,7 @@
         response = "stroke",
         seed = 2025
       )
-    #- 4.3.3: Run SVM without tot_inj
+    #- 4.4.3: Run SVM without tot_inj
       svm_result_no_tot <- run_svm_model(
         df = rf_xgb_no_tots,
         response = "stroke",
@@ -720,7 +726,7 @@
         confmat_cv <- caret::confusionMatrix(preds_cv, truth_cv, positive = "Y")
         auc_cv <- pROC::auc(truth_cv, probs_cv)
 
-        list(
+        return(list(
           summary_train = tibble::tibble(
             Model = "GAM (Train Prediction, Optimistic)",
             AUC = as.numeric(auc_train),
@@ -732,8 +738,9 @@
             AUC = as.numeric(auc_cv),
             Sensitivity = confmat_cv$byClass["Sensitivity"],
             Specificity = confmat_cv$byClass["Specificity"]
-          )
-        )
+          ),
+          gam_fit = gam_fit # ← ADD THIS
+        ))
       }
     #- 4.5.2: Run GAM with tot_inj
       gam_result_tot <- run_gam_model(
@@ -821,153 +828,325 @@
         response = "stroke",
         seed = 2025
       )
-#* 5: Compare all models
-#+ 5.1 Combine all model summaries, add youdens_j
-  all_model_results <- bind_rows(
-    # LASSO
-    lasso_result$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "Y"),
-    lasso_result$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "Y"),
-    lasso_result_no_tot$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "N"),
-    lasso_result_no_tot$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "N"),
-    # Random Forest
-    rf_result_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "Y"),
-    rf_result_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "Y"),
-    rf_result_no_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "N"),
-    rf_result_no_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "N"),
-    # XGBoost
-    xgb_result_tot$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "Y"),
-    xgb_result_tot$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "Y"),
-    xgb_result_no_tot$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "N"),
-    xgb_result_no_tot$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "N"),
-    # SVM
-    svm_result_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "Y"),
-    svm_result_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "Y"),
-    svm_result_no_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "N"),
-    svm_result_no_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "N"),
-    # GAM
-    gam_result_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "Y"),
-    gam_result_tot$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "Y"),
-    gam_result_no_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "N"),
-    gam_result_no_tot$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "N"),
-    # MLP
-    mlp_result_tot$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "Y"),
-    mlp_result_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "Y"),
-    mlp_result_no_tot$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "N"),
-    mlp_result_no_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "N")
-  ) %>%
-    mutate(across(c(AUC, Sensitivity, Specificity), ~ round(., 3))) %>%
-    select(model, Prediction, total_inj_included, AUC, Sensitivity, Specificity) %>%
-    mutate(
-    youdens_j = Sensitivity + Specificity - 1
-  ) %>%
-  mutate(Category = case_when(
-    model == "LASSO" ~ "Penalized GLM",
-    model == "Random Forest" ~ "Ensemble (bagging)",
-    model == "GAM" ~ "Additive spline model",
-    model == "XGBoost" ~ "Ensemble (boosting)",
-    model == "SVM" ~ "Margin-based classifier",
-    model == "MLP" ~ "Neural network",
-    TRUE ~ NA_character_
-  )) %>%
-  mutate(Feature_Selection = case_when(
-    model == "LASSO" ~ "Built-in (penalty)",
-    model == "Random Forest" ~ "Implicit (importance)",
-    model == "GAM" ~ "None",
-    model == "XGBoost" ~ "Implicit (importance)",
-    model == "SVM" ~ "None",
-    model == "MLP" ~ "None",
-    TRUE ~ NA_character_
-  )) 
-#+ 5.2 Break them into CV vs train
-  #- 5.2.1: CV results
-    all_model_results_cv <- all_model_results %>%
-      filter(Prediction == "CV") %>%
-      select(-Prediction) %>%
-      arrange(desc(youdens_j))
-  #- 5.2.2: Train results
-    all_model_results_train <- all_model_results %>%
-      filter(Prediction == "Train") %>%
-      select(-Prediction)
-#+ 5.3 Now make a excluded total_inj and export
-  table1 <- all_model_results_cv %>%
-    filter(total_inj_included == "N") %>%
-    select(model,Category,Feature_Selection,youdens_j, everything(),-total_inj_included) %>%
-    mutate(across(where(is.numeric), ~ round(.x, 2)))
-  write.xlsx(table1, "model_comparison_no_tot_inj.xlsx")
-#+ 5.4 Construct ROC curves for all of those model.Selector(
-#- 5.4.1 Define common 100-point grid for smoothed ROC
-  smoothed_points <- seq(0, 1, length.out = 100)
-#- 5.4.2 Helper function to compute smoothed ROC curve
-get_smoothed_roc <- function(truth, probs, model_name, smoothed_points = seq(0, 1, length.out = 100)) {
-  roc_curve <- pROC::roc(truth, probs, levels = c("N", "Y"), direction = "<")
-  smoothed_roc <- data.frame(
-    FPR = smoothed_points,
-    TPR = approx(1 - roc_curve$specificities, roc_curve$sensitivities, xout = smoothed_points)$y
-  )
-  smoothed_roc$Model <- model_name
-  smoothed_roc$AUC <- as.numeric(pROC::auc(roc_curve))
-  return(smoothed_roc)
-}
-#- 5.4.3 Compute smoothed ROC for each model
-# LASSO
-lasso_roc <- get_smoothed_roc(
-  truth = factor(lasso_result_no_tot$preds_cv$truth, levels = c("N", "Y")),
-  probs = lasso_result_no_tot$preds_cv$prob,
-  model_name = "LASSO"
-)
+#* 5: Compare all models in tables (Table 1, ST1 and ST2)
+  #+ 5.1: Combine all model summaries, add youdens_j
+    all_model_results <- bind_rows(
+      # LASSO
+      lasso_result$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "Y"),
+      lasso_result$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "Y"),
+      lasso_result_no_tot$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "N"),
+      lasso_result_no_tot$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "N"),
 
-# Random Forest
-rf_roc <- get_smoothed_roc(
-  truth = factor(rf_result_no_tot$rf_fit$pred$obs, levels = c("N", "Y")),
-  probs = rf_result_no_tot$rf_fit$pred$Y,
-  model_name = "Random Forest"
-)
+      # Random Forest
+      rf_result_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "Y"),
+      rf_result_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "Y"),
+      rf_result_no_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "N"),
+      rf_result_no_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "N"),
 
-# XGBoost
-xgb_matrix <- xgboost::xgb.DMatrix(
-  data = rf_xgb_no_tots %>%
-    select(-stroke) %>%
-    mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
-    as.matrix()
-)
-xgb_probs <- predict(xgb_result_no_tot$final_model, xgb_matrix)
-xgb_truth <- factor(rf_xgb_no_tots$stroke, levels = c("N", "Y"))
+      # XGBoost
+      xgb_result_tot$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "Y"),
+      xgb_result_tot$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "Y"),
+      xgb_result_no_tot$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "N"),
+      xgb_result_no_tot$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "N"),
 
-xgb_roc <- get_smoothed_roc(
-  truth = xgb_truth,
-  probs = xgb_probs,
-  model_name = "XGBoost"
-)
+      # SVM
+      svm_result_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "Y"),
+      svm_result_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "Y"),
+      svm_result_no_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "N"),
+      svm_result_no_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "N"),
 
-# SVM
-svm_roc <- get_smoothed_roc(
-  truth = factor(rf_xgb_no_tots$stroke, levels = c("N", "Y")),
-  probs = attr(predict(
-    svm_result_no_tot$model,
-    rf_xgb_no_tots %>% select(-stroke),
-    probability = TRUE
-  ), "probabilities")[, "Y"],
-  model_name = "SVM"
-)
+      # GAM
+      gam_result_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "Y"),
+      gam_result_tot$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "Y"),
+      gam_result_no_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "N"),
+      gam_result_no_tot$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "N"),
 
-# GAM
-gam_roc <- get_smoothed_roc(
-  truth = factor(gam_result_no_tot$gam_fit$pred$obs, levels = c("N", "Y")),
-  probs = gam_result_no_tot$gam_fit$pred$Y,
-  model_name = "GAM"
-)
+      # MLP
+      mlp_result_tot$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "Y"),
+      mlp_result_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "Y"),
+      mlp_result_no_tot$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "N"),
+      mlp_result_no_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "N")
+    ) %>%
+      mutate(across(c(AUC, Sensitivity, Specificity), ~ round(., 3))) %>%
+      mutate(youdens_j = Sensitivity + Specificity - 1) %>%
+      mutate(
+        Category = case_when(
+          model == "LASSO" ~ "Penalized GLM",
+          model == "Random Forest" ~ "Ensemble (bagging)",
+          model == "GAM" ~ "Additive spline model",
+          model == "XGBoost" ~ "Ensemble (boosting)",
+          model == "SVM" ~ "Margin-based classifier",
+          model == "MLP" ~ "Neural network",
+          TRUE ~ NA_character_
+        ),
+        Feature_Selection = case_when(
+          model == "LASSO" ~ "Built-in (penalty)",
+          model == "Random Forest" ~ "Implicit (importance)",
+          model == "GAM" ~ "None",
+          model == "XGBoost" ~ "Implicit (importance)",
+          model == "SVM" ~ "None",
+          model == "MLP" ~ "None",
+          TRUE ~ NA_character_
+        )
+      ) %>%
+      pivot_wider(
+        names_from = Prediction,
+        values_from = c(AUC, Sensitivity, Specificity, youdens_j),
+        names_glue = "{.value}_{Prediction}"
+      ) %>%
+      group_by(model, total_inj_included) %>%
+      summarise(
+        AUC_CV = max(AUC_CV, na.rm = TRUE),
+        AUC_Train = max(AUC_Train, na.rm = TRUE),
+        Sensitivity_CV = max(Sensitivity_CV, na.rm = TRUE),
+        Sensitivity_Train = max(Sensitivity_Train, na.rm = TRUE),
+        Specificity_CV = max(Specificity_CV, na.rm = TRUE),
+        Specificity_Train = max(Specificity_Train, na.rm = TRUE),
+        youdens_j_CV = max(youdens_j_CV, na.rm = TRUE),
+        youdens_j_Train = max(youdens_j_Train, na.rm = TRUE),
+        .groups = "drop"
+      ) %>%
+      left_join(
+        bind_rows(
+          tibble(model = "LASSO", Category = "Penalized GLM", Feature_Selection = "Built-in (penalty)"),
+          tibble(model = "Random Forest", Category = "Ensemble (bagging)", Feature_Selection = "Implicit (importance)"),
+          tibble(model = "GAM", Category = "Additive spline model", Feature_Selection = "None"),
+          tibble(model = "XGBoost", Category = "Ensemble (boosting)", Feature_Selection = "Implicit (importance)"),
+          tibble(model = "SVM", Category = "Margin-based classifier", Feature_Selection = "None"),
+          tibble(model = "MLP", Category = "Neural network", Feature_Selection = "None")
+        ),
+        by = "model"
+      ) %>%
+      mutate(Model = model) %>%
+      relocate(Model, .before = model) %>%
+      rename(TI_included = total_inj_included) %>%
+      mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
+      mutate(
+        delta_AUC = AUC_Train - AUC_CV,
+        delta_Youdens_J = youdens_j_Train - youdens_j_CV
+      ) %>%
+      select(model, TI_included, Category, Feature_Selection, delta_AUC, delta_Youdens_J, youdens_j_CV, AUC_CV, Sensitivity_CV, Specificity_CV, youdens_j_Train, AUC_Train, Sensitivity_Train, Specificity_Train)
+  #+ 5.3: Now make a excluded total_inj + CV only and export
+    table1 <- all_model_results %>%
+      filter(TI_included == "N") %>%
+      select(model,Category,Feature_Selection,delta_AUC, delta_Youdens_J, youdens_j_CV, AUC_CV,Sensitivity_CV,Specificity_CV) %>%
+      mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
+      arrange(desc(youdens_j_CV))
+    write.xlsx(table1, "table1.xlsx")
+  #+ 5.4: Now make a full comparison table and export
+    ST1 <- all_model_results %>%
+      select(-c(Category,Feature_Selection)) %>%
+      mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
+      arrange(TI_included,desc(youdens_j_CV))
+    write.xlsx(ST1, "ST1.xlsx")
+#* 6: Construct ROC curves for all no tot inj included models
+  #+ 6.1: Prepare for ROC construction
+    #- 6.1.1: Define common 100-point grid for smoothed ROC
+      smoothed_points <- seq(0, 1, length.out = 100)
+    #- 6.1.2: Helper function to compute smoothed ROC curve
+      get_smoothed_roc <- function(truth, probs, model_name, smoothed_points = seq(0, 1, length.out = 100)) {
+        roc_curve <- pROC::roc(truth, probs, levels = c("N", "Y"), direction = "<")
+        smoothed_roc <- data.frame(
+          FPR = smoothed_points,
+          TPR = approx(1 - roc_curve$specificities, roc_curve$sensitivities, xout = smoothed_points)$y
+        )
+        smoothed_roc$Model <- model_name
+        smoothed_roc$AUC <- as.numeric(pROC::auc(roc_curve))
+        return(smoothed_roc)
+      }
+  #+ 6.2: Compute smoothed ROC for each model
+    #- 6.2.1: Random Forest
+      rf_roc <- get_smoothed_roc(
+        truth = factor(rf_result_no_tot$rf_fit$pred$obs, levels = c("N", "Y")),
+        probs = rf_result_no_tot$rf_fit$pred$Y,
+        model_name = "Random Forest"
+      )
+    #- 6.2.2: XGBoost
+      xgb_matrix <- xgboost::xgb.DMatrix(
+        data = rf_xgb_no_tots %>%
+          select(-stroke) %>%
+          mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
+          as.matrix()
+      )
+      xgb_probs <- predict(xgb_result_no_tot$final_model, xgb_matrix)
+      xgb_truth <- factor(rf_xgb_no_tots$stroke, levels = c("N", "Y"))
+      xgb_roc <- get_smoothed_roc(
+        truth = xgb_truth,
+        probs = xgb_probs,
+        model_name = "XGBoost"
+      )
+    #- 6.2.3: MLP
+      mlp_roc <- get_smoothed_roc(
+        truth = factor(mlp_result_no_tot$mlp_fit$pred$obs, levels = c("N", "Y")),
+        probs = mlp_result_no_tot$mlp_fit$pred$Y,
+        model_name = "MLP"
+      )
+    #- 6.2.4: SVM
+      svm_roc <- get_smoothed_roc(
+        truth = factor(rf_xgb_no_tots$stroke, levels = c("N", "Y")),
+        probs = attr(predict(
+          svm_result_no_tot$model,
+          rf_xgb_no_tots %>%
+            select(-stroke) %>%
+            mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
+            as.data.frame(),
+          probability = TRUE
+        ), "probabilities")[, "Y"],
+        model_name = "SVM"
+      )
+    #- 6.2.5: GAM
+      gam_roc <- get_smoothed_roc(
+        truth = factor(gam_result_no_tot$gam_fit$pred$obs, levels = c("N", "Y")),
+        probs = gam_result_no_tot$gam_fit$pred$Y,
+        model_name = "GAM"
+      )
+    #- 6.2.6: LASSO
+      lasso_roc <- get_smoothed_roc(
+        truth = factor(lasso_result_no_tot$preds_cv$truth, levels = c("N", "Y")),
+        probs = lasso_result_no_tot$preds_cv$prob,
+        model_name = "LASSO"
+      )
+  #+ 6.3: Export smoothed ROC curves for Prism graphing
+    smoothed_rocs <- bind_rows(
+      lasso_roc,
+      rf_roc,
+      mlp_roc,
+      gam_roc,
+      xgb_roc,
+      svm_roc
+    ) %>%
+      select(Model, FPR, TPR, AUC)
+    write.csv(smoothed_rocs, "smoothed_rocs.csv", row.names = FALSE)
+#* 7: Construct PR curves for all no tot inj included models
+  #+ 7.1: Function for smoothed PR curves
+    get_smoothed_pr <- function(truth, probs, model_name, smoothed_points = seq(0, 1, length.out = 100)) {
+      # Convert to binary (1 = Y, 0 = N)
+      truth_bin <- as.numeric(truth == "Y")
 
-# MLP
-mlp_roc <- get_smoothed_roc(
-  truth = factor(mlp_result_no_tot$mlp_fit$pred$obs, levels = c("N", "Y")),
-  probs = mlp_result_no_tot$mlp_fit$pred$Y,
-  model_name = "MLP"
-)
-smoothed_rocs <- bind_rows(
-  lasso_roc,
-  rf_roc,
-  xgb_roc,
-  svm_roc,
-  gam_roc,
-  mlp_roc
-)
+      # PRROC wants scores from the positive and negative classes separately
+      pr_obj <- PRROC::pr.curve(
+        scores.class0 = probs[truth_bin == 1], # Positive class scores
+        scores.class1 = probs[truth_bin == 0], # Negative class scores
+        curve = TRUE
+      )
+
+      # Extract and interpolate to a common Recall grid
+      recall_grid <- smoothed_points
+      interp_precision <- approx(x = pr_obj$curve[, 1], y = pr_obj$curve[, 2], xout = recall_grid)$y
+
+      pr_df <- data.frame(
+        Recall = recall_grid,
+        Precision = interp_precision,
+        Model = model_name,
+        PRAUC = pr_obj$auc.integral
+      )
+
+      return(pr_df)
+    }
+  #+ 7.2: Compute smoothed PR curves for each model
+    #- 7.2.1: Random Forest
+      rf_pr <- get_smoothed_pr(
+        truth = factor(rf_result_no_tot$rf_fit$pred$obs, levels = c("N", "Y")),
+        probs = rf_result_no_tot$rf_fit$pred$Y,
+        model_name = "Random Forest"
+      )
+    #- 7.2.2: XGBoost
+      xgb_pr <- get_smoothed_pr(
+        truth = factor(rf_xgb_no_tots$stroke, levels = c("N", "Y")),
+        probs = xgb_probs,
+        model_name = "XGBoost"
+      )
+    #- 7.2.3: MLP
+      mlp_pr <- get_smoothed_pr(
+        truth = factor(mlp_result_no_tot$mlp_fit$pred$obs, levels = c("N", "Y")),
+        probs = mlp_result_no_tot$mlp_fit$pred$Y,
+        model_name = "MLP"
+      )
+    #- 7.2.4: SVM
+      svm_pr <- get_smoothed_pr(
+        truth = factor(rf_xgb_no_tots$stroke, levels = c("N", "Y")),
+        probs = attr(predict(
+          svm_result_no_tot$model,
+          rf_xgb_no_tots %>%
+            select(-stroke) %>%
+            mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
+            as.data.frame(),
+          probability = TRUE
+        ), "probabilities")[, "Y"],
+        model_name = "SVM"
+      )
+    #- 7.2.5: GAM
+      gam_pr <- get_smoothed_pr(
+        truth = factor(gam_result_no_tot$gam_fit$pred$obs, levels = c("N", "Y")),
+        probs = gam_result_no_tot$gam_fit$pred$Y,
+        model_name = "GAM"
+      )
+    #- 7.2.6: LASSO
+      lasso_pr <- get_smoothed_pr(
+        truth = factor(lasso_result_no_tot$preds_cv$truth, levels = c("N", "Y")),
+        probs = lasso_result_no_tot$preds_cv$prob,
+        model_name = "LASSO"
+      )
+  #+ 7.3: Export PR curves for Prism graphing
+    smoothed_prs <- bind_rows(
+      lasso_pr,
+      rf_pr,
+      mlp_pr,
+      gam_pr,
+      xgb_pr,
+      svm_pr,
+    ) %>%
+      select(Model, Recall, Precision, PRAUC)
+    write.csv(smoothed_prs, "smoothed_prs.csv", row.names = FALSE)
+#* 8: Generate various risk scenario graphs
+  #+ 8.1 Make a risk scenario graph based on the LASSO
+    #- 8.1.1 Extract coefficients from lasso_result_no_tot
+      lasso_coefs <- lasso_result_no_tot$selected_variables
+      coef_vec <- setNames(lasso_coefs$Coefficient, lasso_coefs$Variable)
+    #- 8.1.2 Define logistic prediction function from LASSO
+      predict_stroke_risk_lasso <- function(newdata, coefs) {
+        # Ensure all variables are present in newdata
+        stopifnot(all(names(coefs)[-1] %in% names(newdata)))
+
+        # Compute linear predictor (logit)
+        lp <- coefs["(Intercept)"] +
+          rowSums(sweep(newdata[, names(coefs)[-1], drop = FALSE], 2, coefs[-1], `*`))
+
+        # Convert to probability using logistic function
+        prob <- 1 / (1 + exp(-lp))
+        return(prob * 100) # Convert to percent
+      }
+    #- 8.1.3 Generate prediction scenarios
+      pred_data_no_ASA <- rbind(
+        expand.grid(
+          max_carotid = 0:5,
+          max_vert = 0,
+          ASA = 0,
+          sexM = 1,
+          age = 65,
+          scenario = "Carotid"
+        ),
+        expand.grid(
+          max_carotid = 0,
+          max_vert = 0:5,
+          ASA = 0,
+          sexM = 1,
+          age = 65,
+          scenario = "Vertebral"
+        ),
+        expand.grid(
+          max_carotid = 0:5,
+          max_vert = 0:5,
+          ASA = 0,
+          sexM = 1,
+          age = 65,
+          scenario = "Combined"
+        )
+      )
+    #- 8.1.4: Repeat for ASA = 1
+      pred_data_ASA <- pred_data_no_ASA %>%
+        mutate(ASA = 1)
+    #- 8.1.5: Combine all, predict, save
+      pred_data_all <- bind_rows(pred_data_no_ASA, pred_data_ASA)
+      pred_data_all$predicted_prob <- predict_stroke_risk_lasso(pred_data_all, coef_vec)
+      write.csv(pred_data_all, "predicted_stroke_risk_with_LASSO.csv", row.names = FALSE)
