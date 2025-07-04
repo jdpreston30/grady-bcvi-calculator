@@ -338,8 +338,7 @@
 #* 4: Test multiple methods and compare performance
   #+ 4.1: LASSO (variable selection and model fitting)
     #- 4.1.1: Write a full pipeline function to run LASSO
-      run_lasso_analysis <- function(data, model_label = "LASSO") {
-        # Prepare outcome and predictors
+      run_lasso_analysis <- function(data, model_label = "LASSO", use_weights = TRUE) {
         y <- data$stroke
         X <- data %>%
           select(-stroke, -c(Max_LC:Max_VB), -ID) %>%
@@ -347,21 +346,23 @@
           as.matrix()
         y_bin <- as.numeric(y == "Y")
 
-        # Class weights
-        class_weights <- ifelse(y == "Y", sum(y == "N") / sum(y == "Y"), 1)
+        weights <- if (use_weights) {
+          ifelse(y == "Y", sum(y == "N") / sum(y == "Y"), 1)
+        } else {
+          rep(1, length(y))
+        }
 
-        # Repeated CV
+        # Repeat CV
         lasso_repeat_results <- purrr::map_dfr(1:10, function(i) {
           set.seed(2025 + i)
           foldid <- caret::createFolds(y, k = 10, list = FALSE)
           lasso_fit <- glmnet::cv.glmnet(
-            x = X,
-            y = y_bin,
+            x = X, y = y_bin,
             family = "binomial",
             alpha = 1,
             type.measure = "auc",
             foldid = foldid,
-            weights = class_weights
+            weights = weights
           )
           lasso_prob <- predict(lasso_fit, newx = X, s = "lambda.min", type = "response")
           lasso_pred <- ifelse(lasso_prob > 0.5, "Y", "N")
@@ -379,40 +380,22 @@
           )
         })
 
-        # CV summary (realistic)
-        summary_cv <- lasso_repeat_results %>%
-          summarise(
-            Model = paste(model_label, "(CV Prediction, Realistic)"),
-            AUC = mean(AUC),
-            Sensitivity = mean(Sensitivity),
-            Specificity = mean(Specificity)
-          )
-
-        # Final model on all data
+        # Final model fit
         final_foldid <- caret::createFolds(y, k = 10, list = FALSE)
         lasso_fit_final <- glmnet::cv.glmnet(
-          x = X,
-          y = y_bin,
+          x = X, y = y_bin,
           family = "binomial",
           alpha = 1,
           type.measure = "auc",
           foldid = final_foldid,
-          weights = class_weights
+          weights = weights
         )
 
-        # Optimistic performance
         lasso_probs_train <- predict(lasso_fit_final, newx = X, s = "lambda.min", type = "response")
         lasso_preds_train <- ifelse(lasso_probs_train > 0.5, "Y", "N")
         truth_train <- factor(y, levels = c("N", "Y"))
         confmat_train <- caret::confusionMatrix(factor(lasso_preds_train, levels = c("N", "Y")), truth_train, positive = "Y")
         auc_train <- as.numeric(pROC::auc(truth_train, as.vector(lasso_probs_train)))
-
-        summary_optimistic <- tibble::tibble(
-          Model = paste(model_label, "(Train Prediction, Optimistic)"),
-          AUC = auc_train,
-          Sensitivity = confmat_train$byClass["Sensitivity"],
-          Specificity = confmat_train$byClass["Specificity"]
-        )
 
         # Coefficients
         lasso_coefs <- coef(lasso_fit_final, s = "lambda.min")
@@ -422,19 +405,30 @@
           dplyr::rename(Coefficient = s1) %>%
           dplyr::filter(Coefficient != 0)
 
-        # Output list
         return(list(
-          summary_train = summary_optimistic,
-          summary_cv = summary_cv,
+          summary_train = tibble::tibble(
+            Model = paste(model_label, "(Train Prediction, Optimistic)"),
+            AUC = auc_train,
+            Sensitivity = confmat_train$byClass["Sensitivity"],
+            Specificity = confmat_train$byClass["Specificity"]
+          ),
+          summary_cv = lasso_repeat_results %>%
+            summarise(
+              Model = paste(model_label, "(CV Prediction, Realistic)"),
+              AUC = mean(AUC),
+              Sensitivity = mean(Sensitivity),
+              Specificity = mean(Specificity)
+            ),
           selected_variables = selected_vars,
-          preds_cv = lasso_repeat_results %>%
-            select(truth, prob) # <- this line is key
+          preds_cv = lasso_repeat_results %>% select(truth, prob)
         ))
       }
     #- 4.1.2: Run version WITH tot inj
-      lasso_result <- run_lasso_analysis(data = ml_modeling_data, model_label = "LASSO")
+      lasso_result <- run_lasso_analysis(data = ml_modeling_data, model_label = "LASSO", use_weights = TRUE)
+      lasso_unweighted <- run_lasso_analysis(ml_modeling_data, model_label = "LASSO Unweighted", use_weights = FALSE)
     #- 4.1.3: Version WITHOUT tot_inj
-      lasso_result_no_tot <- run_lasso_analysis(data = ml_modeling_data %>% select(-c(tot_vert_inj, tot_carotid_inj)), model_label = "LASSO (no tot_inj)")
+      lasso_result_no_tot <- run_lasso_analysis(data = ml_modeling_data %>% select(-c(tot_vert_inj, tot_carotid_inj)), model_label = "LASSO (no tot_inj)", use_weights = TRUE)
+      lasso_result_no_tot_unweighted <- run_lasso_analysis(data = ml_modeling_data %>% select(-c(tot_vert_inj, tot_carotid_inj)), model_label = "LASSO (no tot_inj)", use_weights = FALSE)
   #+ 4.2: Random Forest model fitting
     #- 4.2.1: Set up data for random forest and xgb later
       #_With tot variable
@@ -444,7 +438,7 @@
         rf_xgb_no_tots <- rf_xgb %>%
           select(-c(tot_carotid_inj, tot_vert_inj))
     #- 4.2.2: Write full pipeline function to run random forest
-      run_rf_analysis <- function(data, model_label, my_seeds) {
+      run_rf_analysis <- function(data, model_label, my_seeds, sampling_method = "down") {
         # Train control
         ctrl <- trainControl(
           method = "repeatedcv",
@@ -453,7 +447,7 @@
           seeds = my_seeds,
           classProbs = TRUE,
           summaryFunction = twoClassSummary,
-          sampling = "down",
+          sampling = sampling_method,
           savePredictions = "final"
         )
         # Train model
@@ -508,11 +502,23 @@
         model_label = "Random Forest",
         my_seeds = my_seeds_rf
       )
+      rf_result_tot_no_downsampling <- run_rf_analysis(
+        data = rf_xgb,
+        model_label = "Random Forest (No downsampling)",
+        my_seeds = my_seeds_rf,
+        sampling_method = NULL
+      )
     #- 4.2.4: Version WITHOUT tot_inj
       rf_result_no_tot <- run_rf_analysis(
         data = rf_xgb_no_tots,
         model_label = "Random Forest (No tot_inj)",
         my_seeds = my_seeds_rf
+      )
+      rf_result_no_tot_no_downsampling <- run_rf_analysis(
+        data = rf_xgb_no_tots,
+        model_label = "Random Forest (No tot_inj) No Downsampling",
+        my_seeds = my_seeds_rf,
+        sampling_method = NULL
       )
   #+ 4.3: Gradient Boosting model fitting
     #- 4.3.1: Write full pipeline function to run XGBoost
