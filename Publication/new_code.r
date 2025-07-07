@@ -399,11 +399,12 @@
         auc_train <- as.numeric(pROC::auc(truth_train, as.vector(lasso_probs_train)))
 
         #_ Coefficients
+        # _ Coefficients
         lasso_coefs <- coef(lasso_fit_final, s = "lambda.min")
         selected_vars <- as.matrix(lasso_coefs) %>%
           as.data.frame() %>%
           tibble::rownames_to_column("Variable") %>%
-          dplyr::rename(Coefficient = s1) %>%
+          setNames(c("Variable", "Coefficient")) %>%
           dplyr::filter(Coefficient != 0)
 
         return(list(
@@ -421,7 +422,8 @@
               Specificity = mean(Specificity)
             ),
           selected_variables = selected_vars,
-          preds_cv = lasso_repeat_results %>% select(truth, prob)
+          preds_cv = lasso_repeat_results %>% select(truth, prob),
+          lasso_fit_final = lasso_fit_final
         ))
       }
     #- 4.1.2: Run version WITH tot inj
@@ -1356,8 +1358,6 @@
         across(where(is.factor), ~ as.numeric(as.factor(.)))
       )
   #+ 9.2: Load IML library and prepare data
-    library(iml)
-    #_ Drop the outcome
     X <- train_data %>% select(-stroke)
     conflicts_prefer(rcdk::matches)
   #+ 9.3: Define predictor object and calculate feature importance
@@ -1374,42 +1374,250 @@
     interaction_svm <- Interaction$new(predictor_svm)
     plot(interaction_svm)
   #+ 9.5: SHAP values for individual prediction
-set.seed(2025)
-row_ids <- sample(1:nrow(X), 50) # You can increase this to 100+ if time allows
+    shap_vals <- lapply(1:nrow(X), function(i) {
+      shap <- Shapley$new(predictor_svm, x.interest = X[i, , drop = FALSE])
+      shap$results %>%
+        mutate(row = i)
+    })
+    shap_all <- bind_rows(shap_vals)
+    # Now compute mean absolute SHAP per feature
+    shap_summary <- shap_all %>%
+      group_by(feature) %>%
+      dplyr::summarise(mean_abs_phi = mean(abs(phi))) %>%
+      arrange(desc(mean_abs_phi))
+    ggplot(shap_summary, aes(x = reorder(feature, mean_abs_phi), y = mean_abs_phi)) +
+      geom_col() +
+      coord_flip() +
+      labs(
+        x = "Feature",
+        y = "Mean absolute SHAP value",
+        title = "Global SHAP Feature Importance (SVM)"
+      )
+  #+ 9.6: Discover age interactions
+    interaction_svm <- Interaction$new(predictor_svm)
+    interaction_age <- Interaction$new(predictor_svm, feature = "age")
+    interaction_age_results <- interaction_age$results %>%
+      arrange(desc(.interaction))
+    # Create a FeatureInteraction object focused on `age`
+    interaction_age <- Interaction$new(predictor_svm, feature = "age")
+#* Visualizing SVM
+  # Step 0: Re-train SVM model (must include probability = TRUE)
+  svm_model <- e1071::svm(
+    stroke ~ .,
+    data = rf_xgb_no_tots,
+    kernel = "radial",
+    cost = 1,
+    gamma = 0.1,
+    probability = TRUE
+  )
 
-# Run Shapley for each patient
-shap_values <- lapply(row_ids, function(i) {
-  shap <- Shapley$new(predictor_svm, x.interest = X[i, ])
-  shap$results %>% mutate(row = i)
-})
+  # Step 1: Build scenario data for age groups
+  ages <- c(20, 45, 75)
+  scenarios <- list(
+    "Left Carotid" = list(Max_LC = 0:5, Max_RC = 0, Max_LV = 0, Max_RV = 0, Max_VB = 0),
+    "Right Carotid" = list(Max_LC = 0, Max_RC = 0:5, Max_LV = 0, Max_RV = 0, Max_VB = 0),
+    "Left Vertebral" = list(Max_LC = 0, Max_RC = 0, Max_LV = 0:5, Max_RV = 0, Max_VB = 0),
+    "Right Vertebral" = list(Max_LC = 0, Max_RC = 0, Max_LV = 0, Max_RV = 0:5, Max_VB = 0)
+  )
 
-# Combine and summarize
-shap_df <- bind_rows(shap_values)
+  pred_data_svm <- purrr::map_dfr(ages, function(a) {
+    purrr::imap_dfr(scenarios, function(vals, name) {
+      expand.grid(
+        Max_LC = vals$Max_LC,
+        Max_RC = vals$Max_RC,
+        Max_LV = vals$Max_LV,
+        Max_RV = vals$Max_RV,
+        Max_VB = vals$Max_VB,
+        ASA = "N",
+        sexM = "Y",
+        age = a,
+        scenario = name,
+        stringsAsFactors = FALSE
+      )
+    })
+  })
 
-# Summarize global feature importance (mean absolute contribution)
-shap_summary <- shap_df %>%
-  group_by(feature) %>%
-  summarize(mean_abs_phi = mean(abs(phi))) %>%
-  arrange(desc(mean_abs_phi))
+  # Step 2: Format scenario data to match model training format
+  predictor_names <- colnames(rf_xgb_no_tots %>% select(-stroke))
+  asa_levels <- levels(rf_xgb_no_tots$ASA)
+  sexM_levels <- levels(rf_xgb_no_tots$sexM)
 
-# Optional: plot global importance
-library(ggplot2)
-ggplot(shap_summary, aes(x = reorder(feature, mean_abs_phi), y = mean_abs_phi)) +
-  geom_col() +
-  coord_flip() +
+  pred_data_for_pred <- pred_data_svm %>%
+    mutate(
+      Max_LC = as.numeric(Max_LC),
+      Max_RC = as.numeric(Max_RC),
+      Max_LV = as.numeric(Max_LV),
+      Max_RV = as.numeric(Max_RV),
+      Max_VB = as.numeric(Max_VB),
+      age    = as.numeric(age),
+      ASA    = factor(ASA, levels = asa_levels),
+      sexM   = factor(sexM, levels = sexM_levels)
+    ) %>%
+    select(all_of(predictor_names)) # match column order exactly
+
+  # Step 3: Predict probabilities
+  svm_probs <- attr(
+    predict(svm_model, pred_data_for_pred, probability = TRUE),
+    "probabilities"
+  )
+
+  # Step 4: Attach predictions and age labels
+  pred_data_svm$predicted_prob <- svm_probs[, "Y"] * 100
+  pred_data_svm$age_group <- factor(
+    pred_data_svm$age,
+    levels = c(20, 45, 75),
+    labels = c("Age 20", "Age 45", "Age 75")
+  )
+
+  # Step 5: Plot
+  ggplot(pred_data_svm, aes(
+    x = Max_LC + Max_RC + Max_LV + Max_RV + Max_VB,
+    y = predicted_prob,
+    color = scenario
+  )) +
+    geom_line(linewidth = 1.2) +
+    facet_wrap(~age_group) +
+    labs(
+      title = "Stroke Risk by Injury Severity and Age (SVM Model)",
+      x = "Injury Severity Score (per region)",
+      y = "Predicted Stroke Probability (%)"
+    ) +
+    theme_minimal()
+#* Visualizing LASSO
+# Step 1: Extract model and predictors
+lasso_fit <- lasso_result_no_tot$lasso_fit_final
+predictors <- ml_modeling_data %>%
+  select(-stroke, -c(Max_LC:Max_VB), -tot_carotid_inj, -tot_vert_inj, -ID) %>%
+  names()
+
+asa_levels <- levels(ml_modeling_data$ASA)
+sexM_levels <- levels(ml_modeling_data$sexM)
+
+# Step 2: Define a function to create scenario data
+make_scenario_df <- function(type = c("vert", "carotid", "combined"), ASA = c("N", "Y")) {
+  type <- match.arg(type)
+
+  expand.grid(
+    grade = 1:5,
+    ASA = ASA,
+    age = 45,
+    sexM = "Y",
+    stringsAsFactors = FALSE
+  ) %>%
+    mutate(
+      ASA = factor(ASA, levels = asa_levels),
+      sexM = factor(sexM, levels = sexM_levels),
+      max_vert = if (type == "vert") grade else if (type == "combined") grade else 0,
+      max_carotid = if (type == "carotid") grade else if (type == "combined") grade else 0
+    ) %>%
+    mutate(injury_type = case_when(
+      type == "vert" ~ "Vertebral Only",
+      type == "carotid" ~ "Carotid Only",
+      type == "combined" ~ "Combined"
+    ))
+}
+
+# Step 3: Generate scenario data
+plot_df_vert <- make_scenario_df("vert")
+plot_df_carotid <- make_scenario_df("carotid")
+plot_df_combined <- make_scenario_df("combined")
+
+# Step 4: Get baseline for all other predictors
+baseline_values <- ml_modeling_data %>%
+  select(all_of(predictors)) %>%
+  summarise(across(everything(), ~ if (is.numeric(.x)) 0 else levels(.x)[1])) %>%
+  slice(1)
+
+# Step 5: Expand each df to full model input
+add_predictors <- function(df) {
+  purrr::map_dfr(1:nrow(df), function(i) {
+    row_i <- df[i, ]
+    baseline_values %>%
+      mutate(
+        age = row_i$age,
+        ASA = factor(row_i$ASA, levels = asa_levels),
+        sexM = factor(row_i$sexM, levels = sexM_levels),
+        max_vert = row_i$max_vert,
+        max_carotid = row_i$max_carotid
+      )
+  })
+}
+
+X_vert <- add_predictors(plot_df_vert)
+X_carotid <- add_predictors(plot_df_carotid)
+X_combined <- add_predictors(plot_df_combined)
+
+# Step 6: Format and predict
+X_vert_matrix <- X_vert %>%
+  mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
+  as.matrix()
+X_carotid_matrix <- X_carotid %>%
+  mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
+  as.matrix()
+X_combined_matrix <- X_combined %>%
+  mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
+  as.matrix()
+
+plot_df_vert$predicted_prob <- as.vector(predict(lasso_fit, newx = X_vert_matrix, s = "lambda.min", type = "response")) * 100
+plot_df_carotid$predicted_prob <- as.vector(predict(lasso_fit, newx = X_carotid_matrix, s = "lambda.min", type = "response")) * 100
+plot_df_combined$predicted_prob <- as.vector(predict(lasso_fit, newx = X_combined_matrix, s = "lambda.min", type = "response")) * 100
+
+# Step 7: Calibrate on training data
+y_train <- ml_modeling_data$stroke
+X_train_matrix <- ml_modeling_data %>%
+  select(all_of(predictors)) %>%
+  mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
+  as.matrix()
+
+lasso_probs <- predict(lasso_fit, newx = X_train_matrix, s = "lambda.min", type = "response")
+
+calib_model <- glm(
+  stroke ~ prob,
+  data = data.frame(
+    stroke = as.numeric(y_train == "Y"),
+    prob = as.vector(lasso_probs)
+  ),
+  family = binomial()
+)
+
+# Step 8: Apply calibration to all three sets
+plot_df_vert$predicted_prob_calibrated <- predict(
+  calib_model,
+  newdata = data.frame(prob = plot_df_vert$predicted_prob / 100),
+  type = "response"
+) * 100
+
+plot_df_carotid$predicted_prob_calibrated <- predict(
+  calib_model,
+  newdata = data.frame(prob = plot_df_carotid$predicted_prob / 100),
+  type = "response"
+) * 100
+
+plot_df_combined$predicted_prob_calibrated <- predict(
+  calib_model,
+  newdata = data.frame(prob = plot_df_combined$predicted_prob / 100),
+  type = "response"
+) * 100
+
+# Step 9: Merge all
+plot_df <- bind_rows(plot_df_vert, plot_df_carotid, plot_df_combined)
+
+# Step 10: Plot
+ggplot(plot_df, aes(
+  x = grade,
+  y = predicted_prob_calibrated,
+  color = injury_type,
+  linetype = ASA,
+  group = interaction(injury_type, ASA)
+)) +
+  geom_line(linewidth = 1.2) +
   labs(
-    x = "Feature",
-    y = "Mean absolute SHAP value",
-    title = "Global SHAP Feature Importance (SVM)"
-  )
-SVM_recheck_data %>%
-  dplyr::group_by(stroke) %>%
-  dplyr::summarise(
-    N = dplyr::n(),
-    Mean_Age = mean(age, na.rm = TRUE),
-    SD_Age = sd(age, na.rm = TRUE),
-    Mean_Age_PlusMinus_SD = paste0(
-      round(Mean_Age, 1), " ± ", round(SD_Age, 1)
-    ),
-    .groups = "drop"
-  )
+    title = "Calibrated LASSO Stroke Risk by Injury Grade, ASA, and Injury Type",
+    x = "Injury Grade",
+    y = "Calibrated Stroke Risk (%)",
+    color = "Injury Type",
+    linetype = "ASA (Aspirin)"
+  ) +
+  theme_minimal()
+
+
