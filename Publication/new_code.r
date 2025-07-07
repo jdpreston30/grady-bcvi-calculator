@@ -7,11 +7,12 @@
 #* 0: Dependencies and setting seeds
   #+ 0.1: Dependencies
     #- 0.1.1: Install all packages
-      install.packages(c("broom", "caret", "glmnet", "kernlab", "knitr", "mice", "pROC","PRROC", "randomForest", "readxl", "RSNNS", "tibble", "tidyverse", "xgboost"))
+      install.packages(c("broom", "caret", "glmnet", "iml", "kernlab", "knitr", "mice", "pROC","PRROC", "randomForest", "readxl", "RSNNS", "tibble", "tidyverse", "xgboost"))
     #- 0.1.2: Load libraries
       library(tidyverse)
       library(readxl)
       library(mice)
+      library(iml)
       library(ternG)
       library(caret)
       library(pROC)
@@ -63,7 +64,7 @@
     #- 1.2.2: Add max grade variables as well as bilateral variables
       raw_iii <- raw_iiii %>%
         mutate(
-          # Max by territory
+          #_ Max by territory
           Max_LC = pmax(!!!raw_iiii[, cols_LC], na.rm = TRUE),
           Max_RC = pmax(!!!raw_iiii[, cols_RC], na.rm = TRUE),
           Max_LV = pmax(!!!raw_iiii[, cols_LV], na.rm = TRUE),
@@ -71,7 +72,7 @@
           Max_VB = pmax(!!!raw_iiii[, cols_VB], na.rm = TRUE)
         ) %>%
         mutate(
-          # Max across sides
+          #_ Max across sides
           max_vert = pmax(Max_LV, Max_RV, Max_VB),
           max_carotid = pmax(Max_RC, Max_LC)) %>%
         mutate(
@@ -89,26 +90,26 @@
     #- 1.2.3: Add multifocal, concom, no_segments variables, change other variables to factors
       raw <- raw_iii %>%
         mutate(
-          # Left Carotid
+          #_ Left Carotid
           LC1_max = pmax(!!!raw_iii[, c("LC1_1", "LC1_2")], na.rm = TRUE),
           LC2_max = pmax(!!!raw_iii[, c("LC2_1", "LC2_2")], na.rm = TRUE),
           LC3_max = pmax(!!!raw_iii[, c("LC3_1", "LC3_2")], na.rm = TRUE),
           LC4_max = pmax(!!!raw_iii[, c("LC4_1", "LC4_2")], na.rm = TRUE),
           LCO_max = pmax(!!!raw_iii[, c("LCO_1", "LCO_2")], na.rm = TRUE),
           LCCB_max = pmax(!!!raw_iii[, c("LCCB_1", "LCCB_2")], na.rm = TRUE),
-          # Right Carotid
+          #_ Right Carotid
           RC1_max = pmax(!!!raw_iii[, c("RC1_1", "RC1_2")], na.rm = TRUE),
           RC2_max = pmax(!!!raw_iii[, c("RC2_1", "RC2_2")], na.rm = TRUE),
           RC3_max = pmax(!!!raw_iii[, c("RC3_1", "RC3_2")], na.rm = TRUE),
           RC4_max = pmax(!!!raw_iii[, c("RC4_1", "RC4_2")], na.rm = TRUE),
           RCO_max = pmax(!!!raw_iii[, c("RCO_1", "RCO_2")], na.rm = TRUE),
           RCCB_max = pmax(!!!raw_iii[, c("RCCB_1", "RCCB_2")], na.rm = TRUE),
-          # Left Vertebral
+          #_ Left Vertebral
           LV1_max = pmax(!!!raw_iii[, c("LV1_1", "LV1_2", "LV1_3")], na.rm = TRUE),
           LV2_max = pmax(!!!raw_iii[, c("LV2_1", "LV2_2", "LV2_3")], na.rm = TRUE),
           LV3_max = pmax(!!!raw_iii[, c("LV3_1", "LV3_2", "LV3_3")], na.rm = TRUE),
           LV4_max = pmax(!!!raw_iii[, c("LV4_1", "LV4_2", "LV4_3")], na.rm = TRUE),
-          # Right Vertebral
+          #_ Right Vertebral
           RV1_max = pmax(!!!raw_iii[, c("RV1_1", "RV1_2", "RV1_3")], na.rm = TRUE),
           RV2_max = pmax(!!!raw_iii[, c("RV2_1", "RV2_2", "RV2_3")], na.rm = TRUE),
           RV3_max = pmax(!!!raw_iii[, c("RV3_1", "RV3_2", "RV3_3")], na.rm = TRUE),
@@ -206,7 +207,7 @@
         stroke_bin = if_else(stroke == "Y", 1, 0),
         stroke_weight = if_else(stroke == "Y", sum(stroke == "N") / sum(stroke == "Y"), 1)
       ) %>%
-      mutate(stroke = factor(stroke, levels = c("N", "Y")))  # ensure it's binary with known order
+      mutate(stroke = factor(stroke, levels = c("N", "Y")))  #_ ensure it's binary with known order
   #+ 3.2: Try individual nested models for each injury type
     carotid_data <- modeling %>%
       filter(context_C == 1)
@@ -232,13 +233,13 @@
         stroke ~ ASA + age + sexM + GCS + ISS + I(ISS^2) +
           max_vert + I(max_vert^2) +
           max_carotid + I(max_carotid^2) +
-          max_vert:max_carotid + # interaction
+          max_vert:max_carotid + #_ interaction
           context_C * (BLC + MFC_present + tot_carotid_inj) +
           context_V * (BLV + MFV_present + tot_vert_inj) +
           concom_CV,
         data = modeling,
         family = binomial()
-        # ,weights = stroke_weight
+        #_ ,weights = stroke_weight
       )
       stepwise_experimental_model <- stepAIC(full_experimental_model, direction = "both", trace = TRUE)
       summary(stepwise_experimental_model)
@@ -250,7 +251,7 @@
           concom_CV,
         data = modeling,
         family = binomial()
-        # ,weights = stroke_weight
+        #_ ,weights = stroke_weight
       )
       stepwise_simpler_model <- stepAIC(full_simpler_model, direction = "both", trace = TRUE)
       summary(stepwise_simpler_model)
@@ -309,7 +310,7 @@
           context_V * (BLV + MFV_present + no_MFV + tot_vert_inj),
         data = modeling,
         family = binomial()
-        # ,weights = stroke_weight
+        #_ ,weights = stroke_weight
       )
       ASA_intx_simp_stepwise <- stepAIC(ASA_intx_simple, direction = "both", trace = TRUE)
       summary(ASA_intx_simp_stepwise)
@@ -352,7 +353,7 @@
           rep(1, length(y))
         }
 
-        # Repeat CV
+        #_ Repeat CV
         lasso_repeat_results <- purrr::map_dfr(1:10, function(i) {
           set.seed(2025 + i)
           foldid <- caret::createFolds(y, k = 10, list = FALSE)
@@ -380,7 +381,7 @@
           )
         })
 
-        # Final model fit
+        #_ Final model fit
         final_foldid <- caret::createFolds(y, k = 10, list = FALSE)
         lasso_fit_final <- glmnet::cv.glmnet(
           x = X, y = y_bin,
@@ -397,7 +398,7 @@
         confmat_train <- caret::confusionMatrix(factor(lasso_preds_train, levels = c("N", "Y")), truth_train, positive = "Y")
         auc_train <- as.numeric(pROC::auc(truth_train, as.vector(lasso_probs_train)))
 
-        # Coefficients
+        #_ Coefficients
         lasso_coefs <- coef(lasso_fit_final, s = "lambda.min")
         selected_vars <- as.matrix(lasso_coefs) %>%
           as.data.frame() %>%
@@ -439,7 +440,7 @@
           select(-c(tot_carotid_inj, tot_vert_inj))
     #- 4.2.2: Write full pipeline function to run random forest
       run_rf_analysis <- function(data, model_label, my_seeds, sampling_method = "down") {
-        # Train control
+        #_ Train control
         ctrl <- trainControl(
           method = "repeatedcv",
           number = 10,
@@ -522,8 +523,9 @@
       )
   #+ 4.3: Gradient Boosting model fitting
     #- 4.3.1: Write full pipeline function to run XGBoost
-      run_xgb_analysis <- function(data, model_label = "XGBoost", repeats = 10, folds = 10, seed_base = 2025) {
-        # Prepare data
+      run_xgb_analysis <- function(data, model_label = "XGBoost", repeats = 10, folds = 10, seed_base = 2025,
+                                   use_weights = TRUE, use_downsampling = TRUE) {
+        # Prepare outcome and predictors
         y <- data$stroke
         X <- data %>%
           select(-stroke) %>%
@@ -531,8 +533,7 @@
           as.matrix()
         y_bin <- as.numeric(y == "Y")
 
-        # Class weights
-        pos_weight <- sum(y_bin == 0) / sum(y_bin == 1)
+        pos_weight <- if (use_weights) sum(y_bin == 0) / sum(y_bin == 1) else 1
 
         # Collect CV results
         cv_results <- purrr::map_dfr(1:repeats, function(i) {
@@ -543,17 +544,21 @@
             test_idx <- which(fold_id == k)
             train_idx <- which(fold_id != k)
 
-            # Downsample training data
             train_df <- data[train_idx, ]
-            train_down <- train_df %>%
-              group_by(stroke) %>%
-              sample_n(min(table(train_df$stroke))) %>%
-              ungroup()
+
+            if (use_downsampling) {
+              train_df <- train_df %>%
+                group_by(stroke) %>%
+                sample_n(min(table(train_df$stroke))) %>%
+                ungroup()
+            }
 
             dtrain <- xgboost::xgb.DMatrix(
-              data = train_down %>% select(-stroke) %>% mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>% as.matrix(),
-              label = as.numeric(train_down$stroke == "Y")
+              data = train_df %>% select(-stroke) %>%
+                mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>% as.matrix(),
+              label = as.numeric(train_df$stroke == "Y")
             )
+
             dtest <- xgboost::xgb.DMatrix(data = X[test_idx, ], label = y_bin[test_idx])
 
             xgb_fit <- xgboost::xgb.train(
@@ -562,7 +567,11 @@
               eval_metric = "auc",
               nrounds = 100,
               verbose = 0,
-              params = list(scale_pos_weight = pos_weight, max_depth = 3, eta = 0.1)
+              params = list(
+                scale_pos_weight = pos_weight,
+                max_depth = 3,
+                eta = 0.1
+              )
             )
 
             prob <- predict(xgb_fit, dtest)
@@ -581,7 +590,7 @@
           })
         })
 
-        # Conservative CV results
+        # Summary CV performance
         summary_cv <- cv_results %>%
           summarise(
             Model = paste(model_label, "(CV Prediction, Realistic)"),
@@ -590,7 +599,7 @@
             Specificity = mean(Specificity)
           )
 
-        # Final train (optimistic)
+        # Final train fit
         dtrain_full <- xgboost::xgb.DMatrix(data = X, label = y_bin)
         xgb_fit_final <- xgboost::xgb.train(
           data = dtrain_full,
@@ -598,7 +607,11 @@
           eval_metric = "auc",
           nrounds = 100,
           verbose = 0,
-          params = list(scale_pos_weight = pos_weight, max_depth = 3, eta = 0.1)
+          params = list(
+            scale_pos_weight = pos_weight,
+            max_depth = 3,
+            eta = 0.1
+          )
         )
         prob_train <- predict(xgb_fit_final, dtrain_full)
         pred_train <- ifelse(prob_train > 0.5, "Y", "N")
@@ -612,7 +625,6 @@
           Specificity = confmat_train$byClass["Specificity"]
         )
 
-        # Return results
         return(list(
           summary_cv = summary_cv,
           summary_train = summary_train,
@@ -620,21 +632,40 @@
         ))
       }
     #- 4.3.2: Run XGBoost with tot_inj
-      xgb_result_tot <- run_xgb_analysis(rf_xgb, model_label = "XGBoost")
+      xgb_result_weighted <- run_xgb_analysis(rf_xgb_no_tots, "XGB Weighted", use_weights = TRUE, use_downsampling = TRUE)
+      xgb_result_unweighted <- run_xgb_analysis(rf_xgb_no_tots, "XGB Unweighted", use_weights = FALSE, use_downsampling = FALSE)
+      xgb_result_downsample_only <- run_xgb_analysis(rf_xgb_no_tots, "XGB Downsample Only", use_weights = FALSE, use_downsampling = TRUE)
+      xgb_result_weight_only <- run_xgb_analysis(rf_xgb_no_tots, "XGB Weight Only", use_weights = TRUE, use_downsampling = FALSE)
     #- 4.3.3: Run XGBoost without tot_inj
-      xgb_result_no_tot <- run_xgb_analysis(rf_xgb_no_tots, model_label = "XGBoost (No tot_inj)")
+      xgb_result_no_tot_weighted <- run_xgb_analysis(rf_xgb, "XGB Weighted", use_weights = TRUE, use_downsampling = TRUE)
+      xgb_result_no_tot_unweighted <- run_xgb_analysis(rf_xgb, "XGB Unweighted", use_weights = FALSE, use_downsampling = FALSE)
+      xgb_result_no_tot_downsample_only <- run_xgb_analysis(rf_xgb, "XGB Downsample Only", use_weights = FALSE, use_downsampling = TRUE)
+      xgb_result_no_tot_weight_only <- run_xgb_analysis(rf_xgb, "XGB Weight Only", use_weights = TRUE, use_downsampling = FALSE)
   #+ 4.4: SVM model fitting
     #- 4.4.1: Write full pipeline function to run SVM
-      run_svm_model <- function(df, response = "stroke", seed = 2025) {
+      run_svm_model <- function(df, response = "stroke", seed = 2025, use_weights = TRUE, use_downsampling = FALSE) {
         set.seed(seed)
         df[[response]] <- factor(df[[response]], levels = c("N", "Y"))
         y <- df[[response]]
+
+        if (use_downsampling) {
+          df <- df %>%
+            group_by(!!sym(response)) %>%
+            sample_n(min(table(df[[response]]))) %>%
+            ungroup()
+          y <- df[[response]]
+        }
+
         X <- df %>%
           select(-all_of(response)) %>%
           mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
           as.data.frame()
 
-        class_weights <- list(N = 1, Y = sum(y == "N") / sum(y == "Y"))
+        class_weights <- if (use_weights) {
+          list(N = 1, Y = sum(y == "N") / sum(y == "Y"))
+        } else {
+          NULL
+        }
 
         model <- e1071::svm(
           x = X,
@@ -649,10 +680,12 @@
         auc_train <- pROC::auc(y, pred_prob)
 
         # caret CV
+        cv_weights <- if (use_weights) unname(unlist(class_weights[y])) else rep(1, length(y))
+
         cv_result <- caret::train(
           x = X, y = y,
           method = "svmRadialWeights",
-          weights = unname(unlist(class_weights[y])),
+          weights = cv_weights,
           trControl = caret::trainControl(
             method = "repeatedcv", number = 10, repeats = 10,
             classProbs = TRUE, summaryFunction = twoClassSummary
@@ -663,36 +696,118 @@
         pred_cv <- ifelse(prob_cv > 0.5, "Y", "N")
         confmat_cv <- caret::confusionMatrix(factor(pred_cv, levels = c("N", "Y")), y, positive = "Y")
         auc_cv <- pROC::auc(y, prob_cv)
+
         return(list(
           summary_train = tibble::tibble(
-            Model = "SVM (Train Prediction, Optimistic)",
+            Model = paste0("SVM (Train Prediction, Optimistic)",
+                            if (use_weights) " + weights" else "",
+                            if (use_downsampling) " + downsampling" else ""),
             AUC = as.numeric(auc_train),
             Sensitivity = confmat_train$byClass["Sensitivity"],
             Specificity = confmat_train$byClass["Specificity"]
           ),
           summary_cv = tibble::tibble(
-            Model = "SVM (CV Prediction, Realistic)",
+            Model = paste0("SVM (CV Prediction, Realistic)",
+                            if (use_weights) " + weights" else "",
+                            if (use_downsampling) " + downsampling" else ""),
             AUC = as.numeric(auc_cv),
             Sensitivity = confmat_cv$byClass["Sensitivity"],
             Specificity = confmat_cv$byClass["Specificity"]
           ),
-          model = model)) # This must be present to be able to get ROC later
+          svm_fit = model))
       }
     #- 4.4.2: Run SVM with tot_inj
-      svm_result_tot <- run_svm_model(
+      svm_result_tot_weighted <- run_svm_model(
         df = rf_xgb,
         response = "stroke",
-        seed = 2025
+        seed = 2025,
+        use_weights = TRUE,
+        use_downsampling = FALSE
+      )
+      svm_result_tot_downsampled <- run_svm_model(
+        df = rf_xgb,
+        response = "stroke",
+        seed = 2025,
+        use_weights = FALSE,
+        use_downsampling = TRUE
+      )
+      svm_result_tot_both <- run_svm_model(
+        df = rf_xgb,
+        response = "stroke",
+        seed = 2025,
+        use_weights = TRUE,
+        use_downsampling = TRUE
+      )
+      svm_result_tot_unadjusted <- run_svm_model(
+        df = rf_xgb,
+        response = "stroke",
+        seed = 2025,
+        use_weights = FALSE,
+        use_downsampling = FALSE
       )
     #- 4.4.3: Run SVM without tot_inj
-      svm_result_no_tot <- run_svm_model(
+      svm_result_no_tot_weighted <- run_svm_model(
         df = rf_xgb_no_tots,
         response = "stroke",
-        seed = 2025
+        seed = 2025,
+        use_weights = TRUE,
+        use_downsampling = FALSE
+      )
+      svm_result_no_tot_downsampled <- run_svm_model(
+        df = rf_xgb_no_tots,
+        response = "stroke",
+        seed = 2025,
+        use_weights = FALSE,
+        use_downsampling = TRUE
+      )
+      svm_result_no_tot_both <- run_svm_model(
+        df = rf_xgb_no_tots,
+        response = "stroke",
+        seed = 2025,
+        use_weights = TRUE,
+        use_downsampling = TRUE
+      )
+      svm_result_no_tot_unadjusted <- run_svm_model(
+        df = rf_xgb_no_tots,
+        response = "stroke",
+        seed = 2025,
+        use_weights = FALSE,
+        use_downsampling = FALSE
+      )
+    #- 4.4.4 See how well it performs on simplified data
+      SVM_recheck_data <- ml_modeling_data %>%
+        select(stroke, ASA, sexM, age, max_carotid, max_vert)
+      SVM_recheck_data_weighted <- run_svm_model(
+        df = SVM_recheck_data,
+        response = "stroke",
+        seed = 2025,
+        use_weights = TRUE,
+        use_downsampling = FALSE
+      )
+      SVM_recheck_data_downsampled <- run_svm_model(
+        df = SVM_recheck_data,
+        response = "stroke",
+        seed = 2025,
+        use_weights = FALSE,
+        use_downsampling = TRUE
+      )
+      SVM_recheck_data_both <- run_svm_model(
+        df = SVM_recheck_data,
+        response = "stroke",
+        seed = 2025,
+        use_weights = TRUE,
+        use_downsampling = TRUE
+      )
+      SVM_recheck_data_unadj <- run_svm_model(
+        df = SVM_recheck_data,
+        response = "stroke",
+        seed = 2025,
+        use_weights = FALSE,
+        use_downsampling = FALSE
       )
   #+ 4.5: GAM model fitting
     #- 4.5.1: Write full pipeline function to run GAM
-      run_gam_model <- function(df, response = "stroke", seed = 2025) {
+      run_gam_model <- function(df, response = "stroke", seed = 2025, sampling_method = "down") {
         set.seed(seed)
         df[[response]] <- factor(df[[response]], levels = c("N", "Y"))
         y <- df[[response]]
@@ -707,7 +822,7 @@
           repeats = 10,
           classProbs = TRUE,
           summaryFunction = twoClassSummary,
-          sampling = "down",
+          sampling = sampling_method,
           savePredictions = "final"
         )
 
@@ -734,35 +849,49 @@
 
         return(list(
           summary_train = tibble::tibble(
-            Model = "GAM (Train Prediction, Optimistic)",
+            Model = if (is.null(sampling_method)) "GAM (Train Prediction, Optimistic, No Downsampling)" else "GAM (Train Prediction, Optimistic)",
             AUC = as.numeric(auc_train),
             Sensitivity = confmat_train$byClass["Sensitivity"],
             Specificity = confmat_train$byClass["Specificity"]
           ),
           summary_cv = tibble::tibble(
-            Model = "GAM (CV Prediction, Realistic)",
+            Model = if (is.null(sampling_method)) "GAM (CV Prediction, Realistic, No Downsampling)" else "GAM (CV Prediction, Realistic)",
             AUC = as.numeric(auc_cv),
             Sensitivity = confmat_cv$byClass["Sensitivity"],
             Specificity = confmat_cv$byClass["Specificity"]
           ),
-          gam_fit = gam_fit # ← ADD THIS
+          gam_fit = gam_fit
         ))
       }
     #- 4.5.2: Run GAM with tot_inj
       gam_result_tot <- run_gam_model(
         df = rf_xgb,
         response = "stroke",
-        seed = 2025
+        seed = 2025,
+        sampling_method = "down"
+      )
+      gam_result_tot_no_downsampling <- run_gam_model(
+        df = rf_xgb,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = NULL
       )
     #- 4.5.3: Run GAM without tot_inj
       gam_result_no_tot <- run_gam_model(
         df = rf_xgb_no_tots,
         response = "stroke",
-        seed = 2025
+        seed = 2025,
+        sampling_method = "down"
+      )
+      gam_result_no_tot_no_downsampling <- run_gam_model(
+        df = rf_xgb_no_tots,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = NULL
       )
   #+ 4.6: MLP model fitting
     #- 4.6.1: Write full pipeline function to run MLP
-      run_mlp_model <- function(df, response = "stroke", seed = 2025) {
+      run_mlp_model <- function(df, response = "stroke", seed = 2025, sampling_method = "down") {
         set.seed(seed)
         df[[response]] <- factor(df[[response]], levels = c("N", "Y"))
         y <- df[[response]]
@@ -777,14 +906,14 @@
           repeats = 10,
           classProbs = TRUE,
           summaryFunction = twoClassSummary,
-          sampling = "down",
+          sampling = sampling_method,
           savePredictions = "final"
         )
 
         mlp_fit <- caret::train(
           x = X,
           y = y,
-          method = "nnet", # <--- safer
+          method = "nnet",
           metric = "ROC",
           trControl = ctrl,
           tuneLength = 5,
@@ -808,70 +937,124 @@
 
         list(
           summary_train = tibble::tibble(
-            Model = "MLP (Train Prediction, Optimistic)",
+            Model = if (is.null(sampling_method)) "MLP (Train Prediction, Optimistic, No Downsampling)" else "MLP (Train Prediction, Optimistic)",
             AUC = as.numeric(auc_train),
             Sensitivity = confmat_train$byClass["Sensitivity"],
             Specificity = confmat_train$byClass["Specificity"]
           ),
           summary_cv = tibble::tibble(
-            Model = "MLP (CV Prediction, Realistic)",
+            Model = if (is.null(sampling_method)) "MLP (CV Prediction, Realistic, No Downsampling)" else "MLP (CV Prediction, Realistic)",
             AUC = as.numeric(auc_cv),
             Sensitivity = confmat_cv$byClass["Sensitivity"],
             Specificity = confmat_cv$byClass["Specificity"]
           ),
-          mlp_fit = mlp_fit # <--- ADD THIS LINE
+          mlp_fit = mlp_fit
         )
       }
     #- 4.6.2: Run MLP with tot_inj
       mlp_result_tot <- run_mlp_model(
         df = rf_xgb,
         response = "stroke",
-        seed = 2025
+        seed = 2025,
+        sampling_method = "down"
+      )
+      mlp_result_tot_no_downsampling <- run_mlp_model(
+        df = rf_xgb,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = NULL
       )
     #- 4.6.3: Run MLP without tot_inj
       mlp_result_no_tot <- run_mlp_model(
         df = rf_xgb_no_tots,
         response = "stroke",
-        seed = 2025
+        seed = 2025,
+        sampling_method = "down"
+      )
+      mlp_result_no_tot_no_downsampling <- run_mlp_model(
+        df = rf_xgb_no_tots,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = NULL
       )
 #* 5: Compare all models in tables (Table 1, ST1 and ST2)
-  #+ 5.1: Combine all model summaries, add youdens_j
+  #+ 5.0: Combine all model summaries, add youdens_j
     all_model_results <- bind_rows(
       # LASSO
-      lasso_result$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "Y"),
-      lasso_result$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "Y"),
-      lasso_result_no_tot$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "N"),
-      lasso_result_no_tot$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "N"),
+      lasso_result$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "Y", Weighting = "Y", Downsampling = "N"),
+      lasso_result$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "Y", Weighting = "Y", Downsampling = "N"),
+      lasso_unweighted$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "Y", Weighting = "N", Downsampling = "N"),
+      lasso_unweighted$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "Y", Weighting = "N", Downsampling = "N"),
+      lasso_result_no_tot$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "N", Weighting = "Y", Downsampling = "N"),
+      lasso_result_no_tot$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "N", Weighting = "Y", Downsampling = "N"),
+      lasso_result_no_tot_unweighted$summary_cv %>% mutate(model = "LASSO", Prediction = "CV", total_inj_included = "N", Weighting = "N", Downsampling = "N"),
+      lasso_result_no_tot_unweighted$summary_train %>% mutate(model = "LASSO", Prediction = "Train", total_inj_included = "N", Weighting = "N", Downsampling = "N"),
 
       # Random Forest
-      rf_result_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "Y"),
-      rf_result_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "Y"),
-      rf_result_no_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "N"),
-      rf_result_no_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "N"),
+      rf_result_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "Y", Weighting = "N", Downsampling = "Y"),
+      rf_result_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "Y", Weighting = "N", Downsampling = "Y"),
+      rf_result_tot_no_downsampling$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "Y", Weighting = "N", Downsampling = "N"),
+      rf_result_tot_no_downsampling$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "Y", Weighting = "N", Downsampling = "N"),
+      rf_result_no_tot$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "N", Weighting = "N", Downsampling = "Y"),
+      rf_result_no_tot$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "N", Weighting = "N", Downsampling = "Y"),
+      rf_result_no_tot_no_downsampling$summary_cv %>% mutate(model = "Random Forest", Prediction = "CV", total_inj_included = "N", Weighting = "N", Downsampling = "N"),
+      rf_result_no_tot_no_downsampling$summary_train %>% mutate(model = "Random Forest", Prediction = "Train", total_inj_included = "N", Weighting = "N", Downsampling = "N"),
 
       # XGBoost
-      xgb_result_tot$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "Y"),
-      xgb_result_tot$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "Y"),
-      xgb_result_no_tot$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "N"),
-      xgb_result_no_tot$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "N"),
+      xgb_result_weighted$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "N", Weighting = "Y", Downsampling = "Y"),
+      xgb_result_weighted$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "N", Weighting = "Y", Downsampling = "Y"),
+      xgb_result_unweighted$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "N", Weighting = "N", Downsampling = "N"),
+      xgb_result_unweighted$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "N", Weighting = "N", Downsampling = "N"),
+      xgb_result_downsample_only$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "N", Weighting = "N", Downsampling = "Y"),
+      xgb_result_downsample_only$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "N", Weighting = "N", Downsampling = "Y"),
+      xgb_result_weight_only$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "N", Weighting = "Y", Downsampling = "N"),
+      xgb_result_weight_only$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "N", Weighting = "Y", Downsampling = "N"),
+      xgb_result_no_tot_weighted$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "Y", Weighting = "Y", Downsampling = "Y"),
+      xgb_result_no_tot_weighted$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "Y", Weighting = "Y", Downsampling = "Y"),
+      xgb_result_no_tot_unweighted$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "Y", Weighting = "N", Downsampling = "N"),
+      xgb_result_no_tot_unweighted$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "Y", Weighting = "N", Downsampling = "N"),
+      xgb_result_no_tot_downsample_only$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "Y", Weighting = "N", Downsampling = "Y"),
+      xgb_result_no_tot_downsample_only$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "Y", Weighting = "N", Downsampling = "Y"),
+      xgb_result_no_tot_weight_only$summary_cv %>% mutate(model = "XGBoost", Prediction = "CV", total_inj_included = "Y", Weighting = "Y", Downsampling = "N"),
+      xgb_result_no_tot_weight_only$summary_train %>% mutate(model = "XGBoost", Prediction = "Train", total_inj_included = "Y", Weighting = "Y", Downsampling = "N"),
 
       # SVM
-      svm_result_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "Y"),
-      svm_result_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "Y"),
-      svm_result_no_tot$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "N"),
-      svm_result_no_tot$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "N"),
+      svm_result_tot_weighted$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "Y", Weighting = "Y", Downsampling = "N"),
+      svm_result_tot_weighted$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "Y", Weighting = "Y", Downsampling = "N"),
+      svm_result_tot_downsampled$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "Y", Weighting = "N", Downsampling = "Y"),
+      svm_result_tot_downsampled$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "Y", Weighting = "N", Downsampling = "Y"),
+      svm_result_tot_both$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "Y", Weighting = "Y", Downsampling = "Y"),
+      svm_result_tot_both$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "Y", Weighting = "Y", Downsampling = "Y"),
+      svm_result_tot_unadjusted$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "Y", Weighting = "N", Downsampling = "N"),
+      svm_result_tot_unadjusted$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "Y", Weighting = "N", Downsampling = "N"),
+      svm_result_no_tot_weighted$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "N", Weighting = "Y", Downsampling = "N"),
+      svm_result_no_tot_weighted$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "N", Weighting = "Y", Downsampling = "N"),
+      svm_result_no_tot_downsampled$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "N", Weighting = "N", Downsampling = "Y"),
+      svm_result_no_tot_downsampled$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "N", Weighting = "N", Downsampling = "Y"),
+      svm_result_no_tot_both$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "N", Weighting = "Y", Downsampling = "Y"),
+      svm_result_no_tot_both$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "N", Weighting = "Y", Downsampling = "Y"),
+      svm_result_no_tot_unadjusted$summary_cv %>% mutate(model = "SVM", Prediction = "CV", total_inj_included = "N", Weighting = "N", Downsampling = "N"),
+      svm_result_no_tot_unadjusted$summary_train %>% mutate(model = "SVM", Prediction = "Train", total_inj_included = "N", Weighting = "N", Downsampling = "N"),
 
       # GAM
-      gam_result_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "Y"),
-      gam_result_tot$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "Y"),
-      gam_result_no_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "N"),
-      gam_result_no_tot$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "N"),
+      gam_result_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "Y", Weighting = "N", Downsampling = "Y"),
+      gam_result_tot$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "Y", Weighting = "N", Downsampling = "Y"),
+      gam_result_tot_no_downsampling$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "Y", Weighting = "N", Downsampling = "N"),
+      gam_result_tot_no_downsampling$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "Y", Weighting = "N", Downsampling = "N"),
+      gam_result_no_tot$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "N", Weighting = "N", Downsampling = "Y"),
+      gam_result_no_tot$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "N", Weighting = "N", Downsampling = "Y"),
+      gam_result_no_tot_no_downsampling$summary_cv %>% mutate(model = "GAM", Prediction = "CV", total_inj_included = "N", Weighting = "N", Downsampling = "N"),
+      gam_result_no_tot_no_downsampling$summary_train %>% mutate(model = "GAM", Prediction = "Train", total_inj_included = "N", Weighting = "N", Downsampling = "N"),
 
       # MLP
-      mlp_result_tot$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "Y"),
-      mlp_result_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "Y"),
-      mlp_result_no_tot$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "N"),
-      mlp_result_no_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "N")
+      mlp_result_tot$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "Y", Weighting = "N", Downsampling = "Y"),
+      mlp_result_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "Y", Weighting = "N", Downsampling = "Y"),
+      mlp_result_tot_no_downsampling$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "Y", Weighting = "N", Downsampling = "N"),
+      mlp_result_tot_no_downsampling$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "Y", Weighting = "N", Downsampling = "N"),
+      mlp_result_no_tot$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "N", Weighting = "N", Downsampling = "Y"),
+      mlp_result_no_tot$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "N", Weighting = "N", Downsampling = "Y"),
+      mlp_result_no_tot_no_downsampling$summary_cv %>% mutate(model = "MLP", Prediction = "CV", total_inj_included = "N", Weighting = "N", Downsampling = "N"),
+      mlp_result_no_tot_no_downsampling$summary_train %>% mutate(model = "MLP", Prediction = "Train", total_inj_included = "N", Weighting = "N", Downsampling = "N")
     ) %>%
       mutate(across(c(AUC, Sensitivity, Specificity), ~ round(., 3))) %>%
       mutate(youdens_j = Sensitivity + Specificity - 1) %>%
@@ -900,7 +1083,7 @@
         values_from = c(AUC, Sensitivity, Specificity, youdens_j),
         names_glue = "{.value}_{Prediction}"
       ) %>%
-      group_by(model, total_inj_included) %>%
+      group_by(model, total_inj_included, Weighting, Downsampling) %>%
       summarise(
         AUC_CV = max(AUC_CV, na.rm = TRUE),
         AUC_Train = max(AUC_Train, na.rm = TRUE),
@@ -926,12 +1109,17 @@
       mutate(Model = model) %>%
       relocate(Model, .before = model) %>%
       rename(TI_included = total_inj_included) %>%
+      mutate(adj = ifelse(Weighting == "Y" | Downsampling == "Y", "Y", "N")) %>%
       mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
       mutate(
         delta_AUC = AUC_Train - AUC_CV,
         delta_Youdens_J = youdens_j_Train - youdens_j_CV
       ) %>%
-      select(model, TI_included, Category, Feature_Selection, delta_AUC, delta_Youdens_J, youdens_j_CV, AUC_CV, Sensitivity_CV, Specificity_CV, youdens_j_Train, AUC_Train, Sensitivity_Train, Specificity_Train)
+      select(model, TI_included, Weighting, Downsampling, adj, Category, Feature_Selection, delta_AUC, delta_Youdens_J, youdens_j_CV, AUC_CV, Sensitivity_CV, Specificity_CV, youdens_j_Train, AUC_Train, Sensitivity_Train, Specificity_Train)
+  #+ 5.2 Full comparison
+    all_model_results_eval <- all_model_results %>%
+      select(model, adj, everything(),-Category, -Feature_Selection, -AUC_CV, -AUC_Train,-c(youdens_j_Train:Specificity_Train)) %>%
+      arrange(desc(youdens_j_CV))
   #+ 5.3: Now make a excluded total_inj + CV only and export
     table1 <- all_model_results %>%
       filter(TI_included == "N") %>%
@@ -1104,7 +1292,9 @@
     ) %>%
       select(Model, Recall, Precision, PRAUC)
     write.csv(smoothed_prs, "smoothed_prs.csv", row.names = FALSE)
-#* 8: Generate various risk scenario graphs
+#* 8: Generate various risk scenario graphs (LASSO)
+  #+ 8.0 Calibrate LASSO to give reasonable risk predictions
+
   #+ 8.1 Make a risk scenario graph based on the LASSO
     #- 8.1.1 Extract coefficients from lasso_result_no_tot
       lasso_coefs <- lasso_result_no_tot$selected_variables
@@ -1156,3 +1346,70 @@
       pred_data_all <- bind_rows(pred_data_no_ASA, pred_data_ASA)
       pred_data_all$predicted_prob <- predict_stroke_risk_lasso(pred_data_all, coef_vec)
       write.csv(pred_data_all, "predicted_stroke_risk_with_LASSO.csv", row.names = FALSE)
+#* 9: Evaluate some of the feature importance of the SVM
+  #+ 9.1: Set up SVM model and training data
+    svm_model <- svm_result_no_tot_downsampled$svm_fit
+    train_data <- rf_xgb_no_tots
+    train_data <- train_data %>%
+      mutate(
+        stroke = as.factor(stroke),
+        across(where(is.factor), ~ as.numeric(as.factor(.)))
+      )
+  #+ 9.2: Load IML library and prepare data
+    library(iml)
+    #_ Drop the outcome
+    X <- train_data %>% select(-stroke)
+    conflicts_prefer(rcdk::matches)
+  #+ 9.3: Define predictor object and calculate feature importance
+    predictor_svm <- Predictor$new(
+      model = svm_model,
+      data = X,
+      y = train_data$stroke,
+      type = "prob", #_ Return probabilities
+      class = "Y" #_ Focus on class "Y"
+    )
+    imp_svm <- FeatureImp$new(predictor_svm, loss = "ce") #_ Cross-entropy
+    plot(imp_svm)
+  #+ 9.4 Interactions
+    interaction_svm <- Interaction$new(predictor_svm)
+    plot(interaction_svm)
+  #+ 9.5: SHAP values for individual prediction
+set.seed(2025)
+row_ids <- sample(1:nrow(X), 50) # You can increase this to 100+ if time allows
+
+# Run Shapley for each patient
+shap_values <- lapply(row_ids, function(i) {
+  shap <- Shapley$new(predictor_svm, x.interest = X[i, ])
+  shap$results %>% mutate(row = i)
+})
+
+# Combine and summarize
+shap_df <- bind_rows(shap_values)
+
+# Summarize global feature importance (mean absolute contribution)
+shap_summary <- shap_df %>%
+  group_by(feature) %>%
+  summarize(mean_abs_phi = mean(abs(phi))) %>%
+  arrange(desc(mean_abs_phi))
+
+# Optional: plot global importance
+library(ggplot2)
+ggplot(shap_summary, aes(x = reorder(feature, mean_abs_phi), y = mean_abs_phi)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    x = "Feature",
+    y = "Mean absolute SHAP value",
+    title = "Global SHAP Feature Importance (SVM)"
+  )
+SVM_recheck_data %>%
+  dplyr::group_by(stroke) %>%
+  dplyr::summarise(
+    N = dplyr::n(),
+    Mean_Age = mean(age, na.rm = TRUE),
+    SD_Age = sd(age, na.rm = TRUE),
+    Mean_Age_PlusMinus_SD = paste0(
+      round(Mean_Age, 1), " ± ", round(SD_Age, 1)
+    ),
+    .groups = "drop"
+  )
