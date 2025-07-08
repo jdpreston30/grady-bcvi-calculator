@@ -7,10 +7,11 @@
 #* 0: Dependencies and setting seeds
   #+ 0.1: Dependencies
     #- 0.1.1: Install all packages
-      install.packages(c("arm", "BAS", "broom", "caret", "glmnet", "iml", "kernlab", "knitr", "mice", "pROC","PRROC", "randomForest", "readxl", "RSNNS", "rstanarm", "tibble", "tidyverse", "xgboost"))
+      install.packages(c("arm", "BAS", "broom", "caret", "glmnet", "iml", "kernlab", "knitr", "mice", "pROC", "progress", "PRROC", "randomForest", "readxl", "RSNNS", "rstanarm", "tibble", "tidyverse", "xgboost"))
     #- 0.1.2: Load libraries
       library(tidyverse)
       library(readxl)
+      library(progress)
       library(mice)
       library(BAS)
       library(iml)
@@ -429,20 +430,23 @@
           lasso_fit_final = lasso_fit_final
         ))
       }
-    #- 4.1.2: Run version WITH tot inj
-      lasso_result <- run_lasso_analysis(data = ml_modeling_data, model_label = "LASSO", use_weights = TRUE)
-      lasso_unweighted <- run_lasso_analysis(ml_modeling_data, model_label = "LASSO Unweighted", use_weights = FALSE)
-    #- 4.1.3: Version WITHOUT tot_inj
+    #- 4.1.2: Version WITHOUT tot_inj
+      #! Note that this was run on simplified data and the laterality based injuries were not provided to the LASSO
       lasso_result_no_tot <- run_lasso_analysis(data = ml_modeling_data %>% select(-c(tot_vert_inj, tot_carotid_inj)), model_label = "LASSO (no tot_inj)", use_weights = TRUE)
       lasso_result_no_tot_unweighted <- run_lasso_analysis(data = ml_modeling_data %>% select(-c(tot_vert_inj, tot_carotid_inj)), model_label = "LASSO (no tot_inj)", use_weights = FALSE)
+    #- 4.1.3 Compile LASSO results
+      lasso_all_variants <- list(
+        lasso_weighted = lasso_result_no_tot,
+        lasso_unweighted = lasso_result_no_tot_unweighted
+      )
   #+ 4.2: Random Forest model fitting
     #- 4.2.1: Set up data for random forest and xgb later
-      #_With tot variable
+      #_Without tot variable, complex
         rf_xgb <- ml_modeling_data %>%
-          select(-c(max_carotid, max_vert), -ID)
-      #_Without tot variable
-        rf_xgb_no_tots <- rf_xgb %>%
-          select(-c(tot_carotid_inj, tot_vert_inj))
+          select(-c(tot_vert_inj, max_carotid, tot_carotid_inj, max_vert), -ID)
+      #_Without tot variable, simple
+        rf_xgb_simpl <- ml_modeling_data %>%
+          select(stroke, ASA, sexM, age, max_carotid, max_vert)
     #- 4.2.2: Write full pipeline function to run random forest
       run_rf_analysis <- function(data, model_label, my_seeds, sampling_method = "down") {
         #_ Train control
@@ -502,150 +506,178 @@
           variable_importance = varimp
         ))
       }
-    #- 4.2.3: Version WITH tot_inj
-      rf_result_tot <- run_rf_analysis(
-        data = rf_xgb,
-        model_label = "Random Forest",
-        my_seeds = my_seeds_rf
-      )
-      rf_result_tot_no_downsampling <- run_rf_analysis(
-        data = rf_xgb,
-        model_label = "Random Forest (No downsampling)",
-        my_seeds = my_seeds_rf,
-        sampling_method = NULL
-      )
-    #- 4.2.4: Version WITHOUT tot_inj
-      rf_result_no_tot <- run_rf_analysis(
-        data = rf_xgb_no_tots,
-        model_label = "Random Forest (No tot_inj)",
-        my_seeds = my_seeds_rf
-      )
-      rf_result_no_tot_no_downsampling <- run_rf_analysis(
-        data = rf_xgb_no_tots,
-        model_label = "Random Forest (No tot_inj) No Downsampling",
-        my_seeds = my_seeds_rf,
-        sampling_method = NULL
+    #- 4.2.3: Wrapper function to run all at once
+      run_rf_all_variants <- function(full_data, simple_data, seeds) {
+        pb <- progress_bar$new(
+          format = "[:bar] :current/:total (:percent) ETA: :eta",
+          total = 4, clear = FALSE, width = 60
+        )
+        out1 <- {
+          pb$tick()
+          run_rf_analysis(data = full_data, model_label = "RF Full (Down)", my_seeds = seeds)
+        }
+        out2 <- {
+          pb$tick()
+          run_rf_analysis(data = full_data, model_label = "RF Full (No Down)", my_seeds = seeds, sampling_method = NULL)
+        }
+        out3 <- {
+          pb$tick()
+          run_rf_analysis(data = simple_data, model_label = "RF Simplified (Down)", my_seeds = seeds)
+        }
+        out4 <- {
+          pb$tick()
+          run_rf_analysis(data = simple_data, model_label = "RF Simplified (No Down)", my_seeds = seeds, sampling_method = NULL)
+        }
+        return(list(
+          rf_down_full = out1,
+          rf_nodown_full = out2,
+          rf_down_simple = out3,
+          rf_nodown_simple = out4
+        ))
+      }
+    #- 4.2.3: Run with two sampling options x simple/complex
+      rf_all_variants <- run_rf_all_variants(
+        full_data = rf_xgb_no_tots,
+        simple_data = rf_xgb_simpl,
+        seeds = my_seeds_rf
       )
   #+ 4.3: Gradient Boosting model fitting
     #- 4.3.1: Write full pipeline function to run XGBoost
-      run_xgb_analysis <- function(data, model_label = "XGBoost", repeats = 10, folds = 10, seed_base = 2025,
-                                   use_weights = TRUE, use_downsampling = TRUE) {
-        # Prepare outcome and predictors
-        y <- data$stroke
-        X <- data %>%
+run_xgb_analysis <- function(data, model_label = "XGBoost", repeats = 10, folds = 10, seed_base = 2025,
+                             use_weights = TRUE, use_downsampling = TRUE, save_model = FALSE, model_name = NULL) {
+  y <- data$stroke
+  X <- data %>%
+    select(-stroke) %>%
+    mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
+    as.matrix()
+  y_bin <- as.numeric(y == "Y")
+  pos_weight <- if (use_weights) sum(y_bin == 0) / sum(y_bin == 1) else 1
+
+  cv_results <- purrr::map_dfr(seq_len(repeats), function(i) {
+    set.seed(seed_base + i)
+    fold_id <- caret::createFolds(y_bin, k = folds, list = FALSE)
+    purrr::map_dfr(seq_len(folds), function(k) {
+      test_idx <- which(fold_id == k)
+      train_idx <- which(fold_id != k)
+      train_df <- data[train_idx, ]
+      if (use_downsampling) {
+        train_df <- train_df %>%
+          group_by(stroke) %>%
+          sample_n(min(table(train_df$stroke))) %>%
+          ungroup()
+      }
+      dtrain <- xgboost::xgb.DMatrix(
+        data = train_df %>%
           select(-stroke) %>%
           mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>%
-          as.matrix()
-        y_bin <- as.numeric(y == "Y")
-
-        pos_weight <- if (use_weights) sum(y_bin == 0) / sum(y_bin == 1) else 1
-
-        # Collect CV results
-        cv_results <- purrr::map_dfr(1:repeats, function(i) {
-          set.seed(seed_base + i)
-          fold_id <- caret::createFolds(y_bin, k = folds, list = FALSE)
-
-          purrr::map_dfr(1:folds, function(k) {
-            test_idx <- which(fold_id == k)
-            train_idx <- which(fold_id != k)
-
-            train_df <- data[train_idx, ]
-
-            if (use_downsampling) {
-              train_df <- train_df %>%
-                group_by(stroke) %>%
-                sample_n(min(table(train_df$stroke))) %>%
-                ungroup()
-            }
-
-            dtrain <- xgboost::xgb.DMatrix(
-              data = train_df %>% select(-stroke) %>%
-                mutate(across(where(is.factor), ~ as.numeric(as.factor(.)))) %>% as.matrix(),
-              label = as.numeric(train_df$stroke == "Y")
-            )
-
-            dtest <- xgboost::xgb.DMatrix(data = X[test_idx, ], label = y_bin[test_idx])
-
-            xgb_fit <- xgboost::xgb.train(
-              data = dtrain,
-              objective = "binary:logistic",
-              eval_metric = "auc",
-              nrounds = 100,
-              verbose = 0,
-              params = list(
-                scale_pos_weight = pos_weight,
-                max_depth = 3,
-                eta = 0.1
-              )
-            )
-
-            prob <- predict(xgb_fit, dtest)
-            pred <- ifelse(prob > 0.5, "Y", "N")
-            truth <- factor(y[test_idx], levels = c("N", "Y"))
-            pred <- factor(pred, levels = c("N", "Y"))
-            confmat <- caret::confusionMatrix(pred, truth, positive = "Y")
-            auc_val <- as.numeric(pROC::auc(truth, prob))
-
-            tibble(
-              rep = i, fold = k,
-              AUC = auc_val,
-              Sensitivity = confmat$byClass["Sensitivity"],
-              Specificity = confmat$byClass["Specificity"]
-            )
-          })
-        })
-
-        # Summary CV performance
-        summary_cv <- cv_results %>%
-          summarise(
-            Model = paste(model_label, "(CV Prediction, Realistic)"),
-            AUC = mean(AUC),
-            Sensitivity = mean(Sensitivity),
-            Specificity = mean(Specificity)
-          )
-
-        # Final train fit
-        dtrain_full <- xgboost::xgb.DMatrix(data = X, label = y_bin)
-        xgb_fit_final <- xgboost::xgb.train(
-          data = dtrain_full,
-          objective = "binary:logistic",
-          eval_metric = "auc",
-          nrounds = 100,
-          verbose = 0,
-          params = list(
-            scale_pos_weight = pos_weight,
-            max_depth = 3,
-            eta = 0.1
-          )
+          as.matrix(),
+        label = as.numeric(train_df$stroke == "Y")
+      )
+      dtest <- xgboost::xgb.DMatrix(data = X[test_idx, ], label = y_bin[test_idx])
+      xgb_fit <- xgboost::xgb.train(
+        data = dtrain,
+        objective = "binary:logistic",
+        eval_metric = "auc",
+        nrounds = 100,
+        verbose = 0,
+        params = list(
+          scale_pos_weight = pos_weight,
+          max_depth = 3,
+          eta = 0.1
         )
-        prob_train <- predict(xgb_fit_final, dtrain_full)
-        pred_train <- ifelse(prob_train > 0.5, "Y", "N")
-        confmat_train <- caret::confusionMatrix(factor(pred_train, levels = c("N", "Y")), factor(y, levels = c("N", "Y")), positive = "Y")
-        auc_train <- as.numeric(pROC::auc(factor(y, levels = c("N", "Y")), prob_train))
+      )
+      prob <- predict(xgb_fit, dtest)
+      pred <- factor(ifelse(prob > 0.5, "Y", "N"), levels = c("N", "Y"))
+      truth <- factor(y[test_idx], levels = c("N", "Y"))
+      suppressMessages(suppressWarnings({
+        confmat <- caret::confusionMatrix(pred, truth, positive = "Y")
+        auc_val <- as.numeric(pROC::auc(truth, prob))
+      }))
+      tibble(
+        rep = i,
+        fold = k,
+        AUC = auc_val,
+        Sensitivity = confmat$byClass["Sensitivity"],
+        Specificity = confmat$byClass["Specificity"]
+      )
+    })
+  })
 
-        summary_train <- tibble(
-          Model = paste(model_label, "(Train Prediction, Optimistic)"),
-          AUC = auc_train,
-          Sensitivity = confmat_train$byClass["Sensitivity"],
-          Specificity = confmat_train$byClass["Specificity"]
-        )
+  summary_cv <- cv_results %>%
+    summarise(
+      Model = paste(model_label, "(CV Prediction, Realistic)"),
+      AUC = mean(AUC),
+      Sensitivity = mean(Sensitivity),
+      Specificity = mean(Specificity)
+    )
 
-        return(list(
-          summary_cv = summary_cv,
-          summary_train = summary_train,
-          final_model = xgb_fit_final
-        ))
-      }
-    #- 4.3.2: Run XGBoost with tot_inj
-      xgb_result_weighted <- run_xgb_analysis(rf_xgb_no_tots, "XGB Weighted", use_weights = TRUE, use_downsampling = TRUE)
-      xgb_result_unweighted <- run_xgb_analysis(rf_xgb_no_tots, "XGB Unweighted", use_weights = FALSE, use_downsampling = FALSE)
-      xgb_result_downsample_only <- run_xgb_analysis(rf_xgb_no_tots, "XGB Downsample Only", use_weights = FALSE, use_downsampling = TRUE)
-      xgb_result_weight_only <- run_xgb_analysis(rf_xgb_no_tots, "XGB Weight Only", use_weights = TRUE, use_downsampling = FALSE)
-    #- 4.3.3: Run XGBoost without tot_inj
-      xgb_result_no_tot_weighted <- run_xgb_analysis(rf_xgb, "XGB Weighted", use_weights = TRUE, use_downsampling = TRUE)
-      xgb_result_no_tot_unweighted <- run_xgb_analysis(rf_xgb, "XGB Unweighted", use_weights = FALSE, use_downsampling = FALSE)
-      xgb_result_no_tot_downsample_only <- run_xgb_analysis(rf_xgb, "XGB Downsample Only", use_weights = FALSE, use_downsampling = TRUE)
-      xgb_result_no_tot_weight_only <- run_xgb_analysis(rf_xgb, "XGB Weight Only", use_weights = TRUE, use_downsampling = FALSE)
+  dtrain_full <- xgboost::xgb.DMatrix(data = X, label = y_bin)
+  xgb_fit_final <- xgboost::xgb.train(
+    data = dtrain_full,
+    objective = "binary:logistic",
+    eval_metric = "auc",
+    nrounds = 100,
+    verbose = 0,
+    params = list(
+      scale_pos_weight = pos_weight,
+      max_depth = 3,
+      eta = 0.1
+    )
+  )
+
+  prob_train <- predict(xgb_fit_final, dtrain_full)
+  pred_train <- factor(ifelse(prob_train > 0.5, "Y", "N"), levels = c("N", "Y"))
+  truth_train <- factor(y, levels = c("N", "Y"))
+  suppressMessages(suppressWarnings({
+    confmat_train <- caret::confusionMatrix(pred_train, truth_train, positive = "Y")
+    auc_train <- as.numeric(pROC::auc(truth_train, prob_train))
+  }))
+
+  summary_train <- tibble(
+    Model = paste(model_label, "(Train Prediction, Optimistic)"),
+    AUC = auc_train,
+    Sensitivity = confmat_train$byClass["Sensitivity"],
+    Specificity = confmat_train$byClass["Specificity"]
+  )
+
+  return(list(
+    summary_cv = summary_cv,
+    summary_train = summary_train
+  ))
+}
+#- 4.3.2: Wrapper funciton to run all variants and combine results
+run_xgb_all_variants <- function(full_data, simple_data, repeats = 10, folds = 10, seed_base = 2025) {
+  pb <- progress::progress_bar$new(
+    format = "[:bar] :current/:total (:percent) ETA: :eta",
+    total = 8, clear = FALSE, width = 60
+  )
+  results <- list()
+  pb$tick()
+  results$full_weight_down <- run_xgb_analysis(full_data, "XGB Weighted", repeats, folds, seed_base, TRUE, TRUE, TRUE, "xgb_full_weight_down")
+  pb$tick()
+  results$full_unweight_nodown <- run_xgb_analysis(full_data, "XGB Unweighted", repeats, folds, seed_base, FALSE, FALSE, TRUE, "xgb_full_unweight_nodown")
+  pb$tick()
+  results$full_down_only <- run_xgb_analysis(full_data, "XGB Downsample Only", repeats, folds, seed_base, FALSE, TRUE, TRUE, "xgb_full_down_only")
+  pb$tick()
+  results$full_weight_only <- run_xgb_analysis(full_data, "XGB Weight Only", repeats, folds, seed_base, TRUE, FALSE, TRUE, "xgb_full_weight_only")
+  pb$tick()
+  results$simpl_weight_down <- run_xgb_analysis(simple_data, "XGB Weighted, simplified", repeats, folds, seed_base, TRUE, TRUE, TRUE, "xgb_simpl_weight_down")
+  pb$tick()
+  results$simpl_unweight_nodown <- run_xgb_analysis(simple_data, "XGB Unweighted, simplified", repeats, folds, seed_base, FALSE, FALSE, TRUE, "xgb_simpl_unweight_nodown")
+  pb$tick()
+  results$simpl_down_only <- run_xgb_analysis(simple_data, "XGB Downsample Only, simplified", repeats, folds, seed_base, FALSE, TRUE, TRUE, "xgb_simpl_down_only")
+  pb$tick()
+  results$simpl_weight_only <- run_xgb_analysis(simple_data, "XGB Weight Only, simplified", repeats, folds, seed_base, TRUE, FALSE, TRUE, "xgb_simpl_weight_only")
+  invisible(results)
+}
+    #- 4.3.3: Run XGBoost with all variants
+      xgb_all_variants <- run_xgb_all_variants(
+        full_data = rf_xgb_no_tots,
+        simple_data = rf_xgb_simpl,
+        repeats = 10,
+        folds = 10,
+        seed_base = 2025
+      )
   #+ 4.4: SVM model fitting
     #- 4.4.1: Write full pipeline function to run SVM
       run_svm_model <- function(df, response = "stroke", seed = 2025, use_weights = TRUE, use_downsampling = FALSE) {
@@ -721,94 +753,25 @@
           ),
           svm_fit = model))
       }
-    #- 4.4.2: Run SVM with tot_inj
-      svm_result_tot_weighted <- run_svm_model(
-        df = rf_xgb,
-        response = "stroke",
-        seed = 2025,
-        use_weights = TRUE,
-        use_downsampling = FALSE
-      )
-      svm_result_tot_downsampled <- run_svm_model(
-        df = rf_xgb,
-        response = "stroke",
-        seed = 2025,
-        use_weights = FALSE,
-        use_downsampling = TRUE
-      )
-      svm_result_tot_both <- run_svm_model(
-        df = rf_xgb,
-        response = "stroke",
-        seed = 2025,
-        use_weights = TRUE,
-        use_downsampling = TRUE
-      )
-      svm_result_tot_unadjusted <- run_svm_model(
-        df = rf_xgb,
-        response = "stroke",
-        seed = 2025,
-        use_weights = FALSE,
-        use_downsampling = FALSE
-      )
-    #- 4.4.3: Run SVM without tot_inj
-      svm_result_no_tot_weighted <- run_svm_model(
-        df = rf_xgb_no_tots,
-        response = "stroke",
-        seed = 2025,
-        use_weights = TRUE,
-        use_downsampling = FALSE
-      )
-      svm_result_no_tot_downsampled <- run_svm_model(
-        df = rf_xgb_no_tots,
-        response = "stroke",
-        seed = 2025,
-        use_weights = FALSE,
-        use_downsampling = TRUE
-      )
-      svm_result_no_tot_both <- run_svm_model(
-        df = rf_xgb_no_tots,
-        response = "stroke",
-        seed = 2025,
-        use_weights = TRUE,
-        use_downsampling = TRUE
-      )
-      svm_result_no_tot_unadjusted <- run_svm_model(
-        df = rf_xgb_no_tots,
-        response = "stroke",
-        seed = 2025,
-        use_weights = FALSE,
-        use_downsampling = FALSE
-      )
-    #- 4.4.4 See how well it performs on simplified data
-      SVM_recheck_data <- ml_modeling_data %>%
-        select(stroke, ASA, sexM, age, max_carotid, max_vert)
-      SVM_recheck_data_weighted <- run_svm_model(
-        df = SVM_recheck_data,
-        response = "stroke",
-        seed = 2025,
-        use_weights = TRUE,
-        use_downsampling = FALSE
-      )
-      SVM_recheck_data_downsampled <- run_svm_model(
-        df = SVM_recheck_data,
-        response = "stroke",
-        seed = 2025,
-        use_weights = FALSE,
-        use_downsampling = TRUE
-      )
-      SVM_recheck_data_both <- run_svm_model(
-        df = SVM_recheck_data,
-        response = "stroke",
-        seed = 2025,
-        use_weights = TRUE,
-        use_downsampling = TRUE
-      )
-      SVM_recheck_data_unadj <- run_svm_model(
-        df = SVM_recheck_data,
-        response = "stroke",
-        seed = 2025,
-        use_weights = FALSE,
-        use_downsampling = FALSE
+    #- 4.4.2: Wrapper function to run and combine results
+      run_svm_all_variants <- function(full_data, simple_data, seed = 2025) {
+        pb <- progress_bar$new(format = "[:bar] :current/:total (:percent) ETA: :eta", total = 8, clear = FALSE, width = 60)
+        results <- list()
+        results$full_weighted <- { pb$tick(); run_svm_model(full_data, seed = seed, use_weights = TRUE, use_downsampling = FALSE) }
+        results$full_downsampled <- { pb$tick(); run_svm_model(full_data, seed = seed, use_weights = FALSE, use_downsampling = TRUE) }
+        results$full_both <- { pb$tick(); run_svm_model(full_data, seed = seed, use_weights = TRUE, use_downsampling = TRUE) }
+        results$full_unadjusted <- { pb$tick(); run_svm_model(full_data, seed = seed, use_weights = FALSE, use_downsampling = FALSE) }
+        results$simpl_weighted <- { pb$tick(); run_svm_model(simple_data, seed = seed, use_weights = TRUE, use_downsampling = FALSE) }
+        results$simpl_downsampled <- { pb$tick(); run_svm_model(simple_data, seed = seed, use_weights = FALSE, use_downsampling = TRUE) }
+        results$simpl_both <- { pb$tick(); run_svm_model(simple_data, seed = seed, use_weights = TRUE, use_downsampling = TRUE) }
+        results$simpl_unadjusted <- { pb$tick(); run_svm_model(simple_data, seed = seed, use_weights = FALSE, use_downsampling = FALSE) }
+        return(results)
+      }
+    #- 4.4.3: Run SVM without tot_inj with four sampling options x simple/complex
+      svm_all_variants <- run_svm_all_variants(
+        full_data = rf_xgb_no_tots,
+        simple_data = rf_xgb_simpl,
+        seed = 2025
       )
   #+ 4.5: GAM model fitting
     #- 4.5.1: Write full pipeline function to run GAM
@@ -868,20 +831,7 @@
           gam_fit = gam_fit
         ))
       }
-    #- 4.5.2: Run GAM with tot_inj
-      gam_result_tot <- run_gam_model(
-        df = rf_xgb,
-        response = "stroke",
-        seed = 2025,
-        sampling_method = "down"
-      )
-      gam_result_tot_no_downsampling <- run_gam_model(
-        df = rf_xgb,
-        response = "stroke",
-        seed = 2025,
-        sampling_method = NULL
-      )
-    #- 4.5.3: Run GAM without tot_inj
+    #- 4.5.2: Run GAM without tot_inj
       gam_result_no_tot <- run_gam_model(
         df = rf_xgb_no_tots,
         response = "stroke",
@@ -956,20 +906,7 @@
           mlp_fit = mlp_fit
         )
       }
-    #- 4.6.2: Run MLP with tot_inj
-      mlp_result_tot <- run_mlp_model(
-        df = rf_xgb,
-        response = "stroke",
-        seed = 2025,
-        sampling_method = "down"
-      )
-      mlp_result_tot_no_downsampling <- run_mlp_model(
-        df = rf_xgb,
-        response = "stroke",
-        seed = 2025,
-        sampling_method = NULL
-      )
-    #- 4.6.3: Run MLP without tot_inj
+    #- 4.6.2: Run MLP without tot_inj
       mlp_result_no_tot <- run_mlp_model(
         df = rf_xgb_no_tots,
         response = "stroke",
@@ -983,7 +920,7 @@
         sampling_method = NULL
       )
   #+ 4.7: Bayesian Logistic Regression
-    #- 4.7.0: Write full pipeline function to run Bayesian logistic regression
+    #- 4.7.1: Write full pipeline function to run Bayesian logistic regression
       run_bayeslog_model <- function(df, response = "stroke", seed = 2025, sampling_method = NULL, use_weights = FALSE, formula = NULL) {
         set.seed(seed)
 
@@ -1014,9 +951,8 @@
         y <- df[[response]]
 
         # Define weights
-        weights <- if (use_weights) {
-          wts <- ifelse(y == "Y", 1, sum(y == "Y") / sum(y == "N"))
-          wts
+        df$obs_weights <- if (use_weights) {
+          ifelse(y == "Y", 1, sum(y == "Y") / sum(y == "N"))
         } else {
           rep(1, length(y))
         }
@@ -1027,7 +963,7 @@
           }
 
          # Fit Bayesian logistic regression
-        bayes_fit <- arm::bayesglm(formula, data = df, family = binomial(), weights = weights)
+        bayes_fit <- arm::bayesglm(formula, data = df, family = binomial(), weights = obs_weights)
 
         # Evaluate model on training data
         prob_train <- predict(bayes_fit, type = "response")
@@ -1047,67 +983,42 @@
           bayes_fit = bayes_fit
         ))
       }
-    #- 4.7.1: Define equations
-      bayes_long = "stroke ~ ASA + sexM + age + Max_LC + Max_RC + Max_LV + Max_RV + Max_VB + ASA:age + age:Max_LC + age:Max_RC + age:Max_LV + age:Max_RV + age:Max_VB"
-      
-      bayes_short <- "stroke ~ ASA + sexM + age + max_vert + max_carotid + tot_vert_inj + tot_carotid_inj + ASA:age + max_vert:age + max_carotid:age + tot_vert_inj:age + tot_carotid_inj:age"
-    #- 4.7.2: Run Bayesian model with tot_inj
-      bayes_down_only <- run_bayeslog_model(
-        df = rf_xgb,
-        response = "stroke",
-        seed = 2025,
-        sampling_method = "down",
-        use_weights = FALSE
-      )
-      bayes_weights_only <- run_bayeslog_model(
-        df = rf_xgb,
-        response = "stroke",
-        seed = 2025,
-        sampling_method = NULL,
-        use_weights = TRUE
-      )
-      bayes_down_weights <- run_bayeslog_model(
-        df = rf_xgb,
-        response = "stroke",
-        seed = 2025,
-        sampling_method = "down",
-        use_weights = TRUE
-      )
-      bayes_unadjusted <- run_bayeslog_model(
-        df = rf_xgb,
-        response = "stroke",
-        seed = 2025,
-        sampling_method = NULL,
-        use_weights = FALSE
-      )
+    #- 4.7.2: Define equations
+      #! Removed Max_VB due to not enough variability for model
+      bayes_long <- as.formula(stroke ~ ASA + sexM + age + Max_LC + Max_RC + Max_LV + Max_RV  + ASA:age + age:Max_LC + age:Max_RC + age:Max_LV + age:Max_RV)
+      bayes_short <- as.formula(stroke ~ ASA + sexM + age + max_vert + max_carotid + ASA:age + max_vert:age + max_carotid:age)
     #- 4.7.3: Run Bayesian model without tot_inj
       bayes_notot_down_only <- run_bayeslog_model(
         df = rf_xgb_no_tots,
         response = "stroke",
         seed = 2025,
         sampling_method = "down",
-        use_weights = FALSE
+        use_weights = FALSE,
+        formula = bayes_long
       )
       bayes_notot_weights_only <- run_bayeslog_model(
         df = rf_xgb_no_tots,
         response = "stroke",
         seed = 2025,
         sampling_method = NULL,
-        use_weights = TRUE
+        use_weights = TRUE,
+        formula = bayes_long
       )
       bayes_notot_down_weights <- run_bayeslog_model(
         df = rf_xgb_no_tots,
         response = "stroke",
         seed = 2025,
         sampling_method = "down",
-        use_weights = TRUE
+        use_weights = TRUE,
+        formula = bayes_long
       )
       bayes_notot_unadjusted <- run_bayeslog_model(
         df = rf_xgb_no_tots,
         response = "stroke",
         seed = 2025,
         sampling_method = NULL,
-        use_weights = FALSE
+        use_weights = FALSE,
+        formula = bayes_long
       )
     #- 4.4.4 See how well it performs on simplified data
       bayes_notot_down_only_simp <- run_bayeslog_model(
@@ -1115,28 +1026,32 @@
         response = "stroke",
         seed = 2025,
         sampling_method = "down",
-        use_weights = FALSE
+        use_weights = FALSE,
+        formula = bayes_short
       )
       bayes_notot_weights_only_simp <- run_bayeslog_model(
         df = SVM_recheck_data,
         response = "stroke",
         seed = 2025,
         sampling_method = NULL,
-        use_weights = TRUE
+        use_weights = TRUE,
+        formula = bayes_short
       )
       bayes_notot_down_weights_simp  <- run_bayeslog_model(
         df = SVM_recheck_data,
         response = "stroke",
         seed = 2025,
         sampling_method = "down",
-        use_weights = TRUE
+        use_weights = TRUE,
+        formula = bayes_short
       )
       bayes_notot_unadjusted_simp <- run_bayeslog_model(
         df = SVM_recheck_data,
         response = "stroke",
         seed = 2025,
         sampling_method = NULL,
-        use_weights = FALSE
+        use_weights = FALSE,
+        formula = bayes_short
       )
     #- 4.7.5: Examine variable importance
       #! Note, this is using a DIFFERENT package than above
@@ -1149,7 +1064,7 @@
         method = "BAS"
       )
       bas_model_summary <- BAS::bas.glm(
-        stroke ~ ASA + sexM + age + max_vert + max_carotid + tot_vert_inj + tot_carotid_inj + ASA:age + max_vert:age + max_carotid:age + tot_vert_inj:age + tot_carotid_inj:age,
+        stroke ~ ASA + sexM + age + max_vert + max_carotid + ASA:age + max_vert:age + max_carotid:age
         data = bayes_data,
         family = binomial(),
         method = "BAS"
