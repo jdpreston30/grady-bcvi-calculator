@@ -7,11 +7,12 @@
 #* 0: Dependencies and setting seeds
   #+ 0.1: Dependencies
     #- 0.1.1: Install all packages
-      install.packages(c("broom", "caret", "glmnet", "iml", "kernlab", "knitr", "mice", "pROC","PRROC", "randomForest", "readxl", "RSNNS", "tibble", "tidyverse", "xgboost"))
+      install.packages(c("arm", "BAS", "broom", "caret", "glmnet", "iml", "kernlab", "knitr", "mice", "pROC","PRROC", "randomForest", "readxl", "RSNNS", "rstanarm", "tibble", "tidyverse", "xgboost"))
     #- 0.1.2: Load libraries
       library(tidyverse)
       library(readxl)
       library(mice)
+      library(BAS)
       library(iml)
       library(ternG)
       library(caret)
@@ -21,8 +22,10 @@
       library(broom)
       library(knitr)
       library(kernlab)
+      library(arm)
       library(RSNNS)
       library(PRROC)
+      library(rstanarm)
   #+ 0.2: Set seeds
     set.seed(2025)
     my_seeds_rf <- c(replicate(100, sample.int(1000, 5), simplify = FALSE), list(sample.int(1000, 1)))
@@ -978,6 +981,178 @@
         response = "stroke",
         seed = 2025,
         sampling_method = NULL
+      )
+  #+ 4.7: Bayesian Logistic Regression
+    #- 4.7.0: Write full pipeline function to run Bayesian logistic regression
+      run_bayeslog_model <- function(df, response = "stroke", seed = 2025, sampling_method = NULL, use_weights = FALSE, formula = NULL) {
+        set.seed(seed)
+
+        # Downsampling if requested
+        if (!is.null(sampling_method) && sampling_method == "down") {
+          df <- df %>%
+            group_by(!!sym(response)) %>%
+            sample_n(min(table(df[[response]]))) %>%
+            ungroup()
+        }
+
+        # Drop low-variance columns but protect response variable
+        drop_low_variance <- function(df, response_col, threshold = 0.95) {
+          keep_cols <- sapply(df, function(col) {
+            if (is.numeric(col) || is.factor(col)) {
+              max(prop.table(table(col))) < threshold
+            } else {
+              TRUE
+            }
+          })
+          keep_cols[response_col] <- TRUE  # keep response no matter what
+          df[, keep_cols]
+        }
+
+        df <- drop_low_variance(df, response)
+
+        # Define outcome
+        y <- df[[response]]
+
+        # Define weights
+        weights <- if (use_weights) {
+          wts <- ifelse(y == "Y", 1, sum(y == "Y") / sum(y == "N"))
+          wts
+        } else {
+          rep(1, length(y))
+        }
+
+        # Formula option
+          if (is.null(formula)) {
+            formula <- as.formula(paste(response, "~ ."))
+          }
+
+         # Fit Bayesian logistic regression
+        bayes_fit <- arm::bayesglm(formula, data = df, family = binomial(), weights = weights)
+
+        # Evaluate model on training data
+        prob_train <- predict(bayes_fit, type = "response")
+        pred_train <- ifelse(prob_train > 0.5, "Y", "N")
+        confmat_train <- caret::confusionMatrix(factor(pred_train, levels = c("N", "Y")), y, positive = "Y")
+        auc_train <- pROC::auc(y, prob_train)
+
+        summary_train <- tibble::tibble(
+          Model = glue::glue("Bayesian (Train Prediction){if (!is.null(sampling_method) && sampling_method == 'down') ', Downsampled' else ''}{if (use_weights) ', Weighted' else ''}"),
+          AUC = as.numeric(auc_train),
+          Sensitivity = confmat_train$byClass["Sensitivity"],
+          Specificity = confmat_train$byClass["Specificity"]
+        )
+
+        return(list(
+          summary_train = summary_train,
+          bayes_fit = bayes_fit
+        ))
+      }
+    #- 4.7.1: Define equations
+      bayes_long = "stroke ~ ASA + sexM + age + Max_LC + Max_RC + Max_LV + Max_RV + Max_VB + ASA:age + age:Max_LC + age:Max_RC + age:Max_LV + age:Max_RV + age:Max_VB"
+      
+      bayes_short <- "stroke ~ ASA + sexM + age + max_vert + max_carotid + tot_vert_inj + tot_carotid_inj + ASA:age + max_vert:age + max_carotid:age + tot_vert_inj:age + tot_carotid_inj:age"
+    #- 4.7.2: Run Bayesian model with tot_inj
+      bayes_down_only <- run_bayeslog_model(
+        df = rf_xgb,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = "down",
+        use_weights = FALSE
+      )
+      bayes_weights_only <- run_bayeslog_model(
+        df = rf_xgb,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = NULL,
+        use_weights = TRUE
+      )
+      bayes_down_weights <- run_bayeslog_model(
+        df = rf_xgb,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = "down",
+        use_weights = TRUE
+      )
+      bayes_unadjusted <- run_bayeslog_model(
+        df = rf_xgb,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = NULL,
+        use_weights = FALSE
+      )
+    #- 4.7.3: Run Bayesian model without tot_inj
+      bayes_notot_down_only <- run_bayeslog_model(
+        df = rf_xgb_no_tots,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = "down",
+        use_weights = FALSE
+      )
+      bayes_notot_weights_only <- run_bayeslog_model(
+        df = rf_xgb_no_tots,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = NULL,
+        use_weights = TRUE
+      )
+      bayes_notot_down_weights <- run_bayeslog_model(
+        df = rf_xgb_no_tots,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = "down",
+        use_weights = TRUE
+      )
+      bayes_notot_unadjusted <- run_bayeslog_model(
+        df = rf_xgb_no_tots,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = NULL,
+        use_weights = FALSE
+      )
+    #- 4.4.4 See how well it performs on simplified data
+      bayes_notot_down_only_simp <- run_bayeslog_model(
+        df = SVM_recheck_data,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = "down",
+        use_weights = FALSE
+      )
+      bayes_notot_weights_only_simp <- run_bayeslog_model(
+        df = SVM_recheck_data,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = NULL,
+        use_weights = TRUE
+      )
+      bayes_notot_down_weights_simp  <- run_bayeslog_model(
+        df = SVM_recheck_data,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = "down",
+        use_weights = TRUE
+      )
+      bayes_notot_unadjusted_simp <- run_bayeslog_model(
+        df = SVM_recheck_data,
+        response = "stroke",
+        seed = 2025,
+        sampling_method = NULL,
+        use_weights = FALSE
+      )
+    #- 4.7.5: Examine variable importance
+      #! Note, this is using a DIFFERENT package than above
+      bayes_data <- ml_modeling_data %>%
+        select(-ID)
+      bas_model_segments <- BAS::bas.glm(
+        stroke ~ ASA + sexM + age + Max_LC + Max_RC + Max_LV + Max_RV + Max_VB + ASA:age + age:Max_LC + age:Max_RC + age:Max_LV + age:Max_RV + age:Max_VB,
+        data = bayes_data,
+        family = binomial(),
+        method = "BAS"
+      )
+      bas_model_summary <- BAS::bas.glm(
+        stroke ~ ASA + sexM + age + max_vert + max_carotid + tot_vert_inj + tot_carotid_inj + ASA:age + max_vert:age + max_carotid:age + tot_vert_inj:age + tot_carotid_inj:age,
+        data = bayes_data,
+        family = binomial(),
+        method = "BAS"
       )
 #* 5: Compare all models in tables (Table 1, ST1 and ST2)
   #+ 5.0: Combine all model summaries, add youdens_j
