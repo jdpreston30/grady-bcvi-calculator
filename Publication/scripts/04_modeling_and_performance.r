@@ -99,45 +99,45 @@
         "LASSO_unweighted", "LASSO", "Simple", "N", "N", "Penalized GLM", "Built-in"
       )
     #- 4.3.4: Combine and annotate with metadata for each model, export
-all_model_summary <- model_summary %>%
-  mutate(
-    Youdens_J = Sensitivity + Specificity - 1
-  ) %>%
-  left_join(manual_metadata, by = "Model") %>%
-  mutate(
-    Sensitivity = paste0(round(Sensitivity * 100, 0), "%"),
-    Specificity = paste0(round(Specificity * 100, 0), "%")
-  ) %>%
-  mutate(
-    Sampling_Method = paste0(
-      if_else(Dataset == "Full", "F", "S"),
-      case_when(
-        Weighting == "Y" & Downsampling == "Y" ~ ",W,D",
-        Weighting == "Y" & Downsampling == "N" ~ ",W",
-        Weighting == "N" & Downsampling == "Y" ~ ",D",
-        TRUE ~ ""
-      )
-    ),
-    # Prioritization ranking for tie-breaking
-    tie_breaker = case_when(
-      Dataset == "Simple" & Downsampling == "Y" & Weighting == "N" ~ 1,
-      Dataset == "Simple" & Downsampling == "Y" & Weighting == "Y" ~ 2,
-      Dataset == "Simple" & Downsampling == "N" & Weighting == "Y" ~ 3,
-      Dataset == "Simple" & Downsampling == "N" & Weighting == "N" ~ 4,
-      Dataset == "Full"   & Downsampling == "Y" & Weighting == "N" ~ 5,
-      Dataset == "Full"   & Downsampling == "Y" & Weighting == "Y" ~ 6,
-      Dataset == "Full"   & Downsampling == "N" & Weighting == "Y" ~ 7,
-      Dataset == "Full"   & Downsampling == "N" & Weighting == "N" ~ 8,
-      TRUE ~ 9
-    )
-  ) %>%
-  group_by(Method) %>%
-  arrange(desc(Youdens_J), tie_breaker, .by_group = TRUE) %>%
-  mutate(Chosen = if_else(row_number() == 1, "Y", "N")) %>%
-  ungroup() %>%
-  mutate(across(where(is.double) & !c(Sensitivity, Specificity), ~ round(.x, 2))) %>%
-  select(Method, Category, Feature_Selection, Youdens_J, AUC, Sensitivity, Specificity,
-         Model, Dataset, Weighting, Downsampling, Sampling_Method, Chosen)
+      all_model_summary <- model_summary %>%
+        mutate(
+          Youdens_J = Sensitivity + Specificity - 1
+        ) %>%
+        left_join(manual_metadata, by = "Model") %>%
+        mutate(
+          Sensitivity = paste0(round(Sensitivity * 100, 0), "%"),
+          Specificity = paste0(round(Specificity * 100, 0), "%")
+        ) %>%
+        mutate(
+          Sampling_Method = paste0(
+            if_else(Dataset == "Full", "F", "S"),
+            case_when(
+              Weighting == "Y" & Downsampling == "Y" ~ ",W,D",
+              Weighting == "Y" & Downsampling == "N" ~ ",W",
+              Weighting == "N" & Downsampling == "Y" ~ ",D",
+              TRUE ~ ""
+            )
+          ),
+          # Prioritization ranking for tie-breaking
+          tie_breaker = case_when(
+            Dataset == "Simple" & Downsampling == "Y" & Weighting == "N" ~ 1,
+            Dataset == "Simple" & Downsampling == "Y" & Weighting == "Y" ~ 2,
+            Dataset == "Simple" & Downsampling == "N" & Weighting == "Y" ~ 3,
+            Dataset == "Simple" & Downsampling == "N" & Weighting == "N" ~ 4,
+            Dataset == "Full"   & Downsampling == "Y" & Weighting == "N" ~ 5,
+            Dataset == "Full"   & Downsampling == "Y" & Weighting == "Y" ~ 6,
+            Dataset == "Full"   & Downsampling == "N" & Weighting == "Y" ~ 7,
+            Dataset == "Full"   & Downsampling == "N" & Weighting == "N" ~ 8,
+            TRUE ~ 9
+          )
+        ) %>%
+        group_by(Method) %>%
+        arrange(desc(Youdens_J), tie_breaker, .by_group = TRUE) %>%
+        mutate(Chosen = if_else(row_number() == 1, "Y", "N")) %>%
+        ungroup() %>%
+        mutate(across(where(is.double) & !c(Sensitivity, Specificity), ~ round(.x, 2))) %>%
+        select(Method, Category, Feature_Selection, Youdens_J, AUC, Sensitivity, Specificity,
+              Model, Dataset, Weighting, Downsampling, Sampling_Method, Chosen)
       write.xlsx(all_model_summary, "model_summary.xlsx")
     #- 4.3.5: Choose the ideal model for each method
       ideal_model_summary <- all_model_summary %>%
