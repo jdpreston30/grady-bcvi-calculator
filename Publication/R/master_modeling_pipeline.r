@@ -69,7 +69,7 @@ run_all_modeling <- function(
       cat("\033[90m✔ Found existing checkpoint. Loading...\033[0m\n\n")
       suppressMessages(readRDS(path))
     } else {
-      suppressMessages(suppressWarnings(eval(step_code)))
+      eval(step_code)
     }
 
     if (!file.exists(path)) saveRDS(result, path)
