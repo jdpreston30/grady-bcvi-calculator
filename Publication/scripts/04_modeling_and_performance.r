@@ -139,25 +139,3 @@
         select(Method, Category, Feature_Selection, Youdens_J, AUC, Sensitivity, Specificity,
               Model, Dataset, Weighting, Downsampling, Sampling_Method, Chosen)
       write.xlsx(all_model_summary, "model_summary.xlsx")
-    #- 4.3.5: Choose the ideal model for each method
-      ideal_model_summary <- all_model_summary %>%
-        filter(Model %in% c(
-          "SVM_full_downsampled",
-          "RF_rf_down_full",
-          "Bayes_simpl_down",
-          "MLP_simpl_down",
-          "GAM_simpl_down",
-          "XGB_simpl_down_only",
-          "LASSO_weighted"
-        )) %>%
-        mutate(
-          Sampling_Method = case_when(
-            Model == "SVM_full_downsampled" ~ "F,D",
-            Model == "RF_rf_down_full" ~ "F,D",
-            Model == "Bayes_simpl_down" ~ "S,D",
-            Model == "MLP_simpl_down" ~ "S,D",
-            Model == "GAM_simpl_down" ~ "S,D",
-            Model == "XGB_simpl_down_only" ~ "S,D",
-            Model == "LASSO_weighted" ~ "S,W"
-          ))
-      write.csv(ideal_model_summary, "ideal_model_summary.csv", row.names = FALSE)
