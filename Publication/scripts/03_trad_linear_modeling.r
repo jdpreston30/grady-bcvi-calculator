@@ -1,6 +1,6 @@
 #* 3: Traditional Linear Modeling
   #+ 3.1: Add a context variable for the model
-    modeling <- nested_analysis %>%
+    modeling <- descriptive_data %>%
       mutate(
         context_C = if_else(isolated_C == "Y" | concom_CV == "Y", 1, 0),
         context_V = if_else(isolated_V == "Y" | concom_CV == "Y", 1, 0)

@@ -9,10 +9,14 @@
         select(stroke, ASA, sexM, age, max_carotid, max_vert)
     #- 4.0.2: Load the modeling functions
       purrr::walk(
-        list.files(here::here("R", "modeling_pipelines"), full.names = TRUE),
+        list.files(
+          here::here("Publication", "R"),
+          pattern = "\\.[rR]$",
+          full.names = TRUE,
+          recursive = TRUE
+        ),
         source
       )
-      source(here::here("Publication", "R", "master_modeling_pipeline.R"))
   #+ 4.1: Run master pipeline
     all_model_results <- run_all_modeling(
       ml_modeling_data = ml_modeling_data,
@@ -117,25 +121,11 @@
               Weighting == "N" & Downsampling == "Y" ~ ",D",
               TRUE ~ ""
             )
-          ),
-          # Prioritization ranking for tie-breaking
-          tie_breaker = case_when(
-            Dataset == "Simple" & Downsampling == "Y" & Weighting == "N" ~ 1,
-            Dataset == "Simple" & Downsampling == "Y" & Weighting == "Y" ~ 2,
-            Dataset == "Simple" & Downsampling == "N" & Weighting == "Y" ~ 3,
-            Dataset == "Simple" & Downsampling == "N" & Weighting == "N" ~ 4,
-            Dataset == "Full"   & Downsampling == "Y" & Weighting == "N" ~ 5,
-            Dataset == "Full"   & Downsampling == "Y" & Weighting == "Y" ~ 6,
-            Dataset == "Full"   & Downsampling == "N" & Weighting == "Y" ~ 7,
-            Dataset == "Full"   & Downsampling == "N" & Weighting == "N" ~ 8,
-            TRUE ~ 9
-          )
-        ) %>%
+          )) %>%
         group_by(Method) %>%
-        arrange(desc(Youdens_J), tie_breaker, .by_group = TRUE) %>%
-        mutate(Chosen = if_else(row_number() == 1, "Y", "N")) %>%
+        arrange(desc(Youdens_J), .by_group = TRUE) %>%
         ungroup() %>%
         mutate(across(where(is.double) & !c(Sensitivity, Specificity), ~ round(.x, 2))) %>%
-        select(Method, Category, Feature_Selection, Youdens_J, AUC, Sensitivity, Specificity,
-              Model, Dataset, Weighting, Downsampling, Sampling_Method, Chosen)
-      write.xlsx(all_model_summary, "model_summary.xlsx")
+        select(Method, Category, Feature_Selection, Youdens_J, AUC, Sensitivity, Specificity, Model, Dataset, Weighting, Downsampling, Sampling_Method) %>%
+        arrange(desc(Youdens_J))
+      write.xlsx(all_model_summary, "model_summary.xlsx") # Manually picked best model in excel

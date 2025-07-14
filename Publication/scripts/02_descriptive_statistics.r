@@ -11,8 +11,8 @@
       ))
   #+ 2.2: Run ternG on only the carotid injuries
     #- 2.2.1: Filter to carotid and vertebral
-      carotid_only <- nested_analysis %>% filter(isolated_C == "Y" | concom_CV == "Y")
-      vertebral_only <- nested_analysis %>% filter(isolated_V == "Y" | concom_CV == "Y")
+      carotid_only <- descriptive_data %>% filter(isolated_C == "Y" | concom_CV == "Y")
+      vertebral_only <- descriptive_data %>% filter(isolated_V == "Y" | concom_CV == "Y")
     #- 2.2.2: Compute the descriptive n's separately
       stroke_counts <- function(df, label) {
         tab <- df %>%
@@ -33,7 +33,7 @@
         )
       }
       combined_descriptives <- bind_rows(
-        stroke_counts(nested_analysis, "All Patients"),
+        stroke_counts(descriptive_data, "All Patients"),
         stroke_counts(carotid_only, "Carotid Patients"),
         stroke_counts(vertebral_only, "Vertebral Patients")
       ) %>%
@@ -80,7 +80,7 @@
       full_model <- glm(
         stroke ~ ASA + BLC + no_MFC + sexM + MFC_present + max_carotid + concom_CV + 
           BLV + no_MFV + MFV_present + max_vert + ISS + GCS + age,
-        data = nested_analysis, 
+        data = descriptive_data, 
         family = binomial()
       )
     #- 2.3.2: Run stepAIC to pare down to simplified model
@@ -93,3 +93,4 @@
       select(term, `OR [95% CI]`, p.value)
     #- 2.3.4: Export the ORs and CIs
       write.xlsx(or_ci_table, "ST2.xlsx")
+
