@@ -4,6 +4,7 @@
   #+ 1.1: Import data
     raw_path <- "/Users/jdp2019/Library/CloudStorage/OneDrive-Emory/Research/Manuscripts and Projects/Grady/Risk Calculator/Raw Data/merged_data_DI.xlsx"
     raw_iiii <- read_excel(raw_path, sheet = "data")
+    raw_path <- "/Users/jdp2019/Desktop/Copy of merged_data_DI.xlsx" # temporary
   #+ 1.2: Add max grade variable for each location
     #- 1.2.1: Define location columns
       cols_LC <- c(

@@ -9,6 +9,16 @@
         )),
         ~ factor(if_else(. == 1, "Y", "N"), levels = c("N", "Y"))
       ))
+
+     nested_analysis <- raw_modeling %>%
+       mutate(across(
+         all_of(c(
+           "stroke", "ASA", "sexM", "BLC", "BLV",
+           "MFC_present", "MFV_present",
+           "isolated_C", "isolated_V", "concom_CV"
+         )),
+         ~ factor(if_else(. == 1, "Y", "N"), levels = c("N", "Y"))
+       ))
   #+ 2.2: Run ternG on only the carotid injuries
     #- 2.2.1: Filter to carotid and vertebral
       carotid_only <- nested_analysis %>% filter(isolated_C == "Y" | concom_CV == "Y")
