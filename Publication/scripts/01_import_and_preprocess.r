@@ -2,7 +2,7 @@
   #+ 1.0: Skip data import below and just load RDS
     list2env(readRDS("all_objects.rds"), envir = .GlobalEnv)
   #+ 1.1: Import data
-    raw_path <- "/Users/jdp2019/Library/CloudStorage/OneDrive-Emory/Research/Manuscripts and Projects/Grady/Risk Calculator/Raw Data/merged_data_DI.xlsx"
+    raw_path <- "/Users/jdp2019/Desktop/merged_data_DI.xlsx" # temp test
     raw_iiii <- read_excel(raw_path, sheet = "data")
   #+ 1.2: Add max grade variable for each location
     #- 1.2.1: Define location columns
@@ -20,7 +20,7 @@
         "RV1_1", "RV2_1", "RV3_1", "RV4_1",
         "RV1_2", "RV2_2", "RV3_2", "RV4_2",
         "RV1_3", "RV2_3", "RV3_3", "RV4_3")
-      cols_VB <- c("VB_1", "VB_2", "VB_3")
+      cols_VB <- c("VB_1")
       #_Check for NAs
         cat("NA counts by location:\n")
         list(
