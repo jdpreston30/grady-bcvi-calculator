@@ -1,0 +1,16 @@
+all_objects.rds
+Calculator/results_with_benefit.rds
+ml_modeling_data.rds
+Publication/ml_modeling_data.rds
+ml_modeling_data.rds
+
+# System files
+.DS_Store
+.Rhistory
+.RData
+.Ruserdata
+*~
+
+# Temporary files
+*.tmp
+rebuild_renv.R

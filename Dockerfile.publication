@@ -1,0 +1,42 @@
+# Dockerfile for BCVI Publication Analysis
+# This provides a reproducible environment for the academic paper's analysis
+
+# Specify platform for cross-platform builds (important for Apple Silicon)
+FROM --platform=linux/amd64 rocker/r-ver:4.5.1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
+    libfontconfig1-dev \
+    libfreetype6-dev \
+    libpng-dev \
+    libtiff5-dev \
+    libjpeg-dev \
+    libharfbuzz-dev \
+    libfribidi-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install renv and remotes for dependency management
+RUN R -e "install.packages(c('renv', 'remotes'), repos='https://cloud.r-project.org')"
+
+# Set working directory
+WORKDIR /home/analysis
+
+# Copy dependency files first for better Docker layer caching
+COPY Publication/DESCRIPTION /home/analysis/DESCRIPTION
+COPY Publication/renv.lock /home/analysis/renv.lock
+COPY Publication/.Rprofile /home/analysis/.Rprofile
+COPY Publication/renv/ /home/analysis/renv/
+
+# Restore exact package versions from renv.lock
+# This includes TernTablesR from GitHub (recorded in the lock file)
+RUN R -e "renv::restore()"
+
+# Copy the rest of the Publication folder
+COPY Publication/ /home/analysis/
+
+# Set default command to R console
+CMD ["R"]

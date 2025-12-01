@@ -1,0 +1,23 @@
+Package: BCVICalculator
+Title: BCVI Stroke Risk Prediction Calculator
+Version: 1.0.0
+Authors@R: c(
+    person("Josh", "Preston", email = "jdpreston30@users.noreply.github.com", role = c("aut", "cre")),
+    person("Wagner", "et al.", role = "aut")
+    )
+Description: Interactive Shiny application for calculating stroke risk in patients with blunt cerebrovascular injury (BCVI). Implements the prediction model from Wagner et al. 2025.
+Depends: 
+    R (>= 4.5.1)
+Imports:
+    conflicted,
+    dplyr,
+    ggplot2,
+    ggprism,
+    gridtext,
+    patchwork,
+    shiny,
+    tibble
+Encoding: UTF-8
+LazyData: true
+URL: https://github.com/jdpreston30/grady-bcvi-calculator
+BugReports: https://github.com/jdpreston30/grady-bcvi-calculator/issues

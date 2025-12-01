@@ -1,0 +1,30 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# RStudio files
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Deployment configs (recreated during deployment)
+rsconnect/
+.secrets
+
+# Documentation
+*.md
+!README.md
+
+# Development files
+.vscode/
+.idea/

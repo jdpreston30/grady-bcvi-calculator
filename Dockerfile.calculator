@@ -1,0 +1,42 @@
+# Dockerfile for BCVI Calculator Shiny App
+# This provides a reproducible environment for running the calculator
+
+# Specify platform for cross-platform builds (important for Apple Silicon)
+FROM --platform=linux/amd64 rocker/shiny:4.5.1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
+    libfontconfig1-dev \
+    libfreetype6-dev \
+    libpng-dev \
+    libtiff5-dev \
+    libjpeg-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install renv for dependency management
+RUN R -e "install.packages('renv', repos='https://cloud.r-project.org')"
+
+# Copy the Calculator app
+WORKDIR /srv/shiny-server
+COPY Calculator/DESCRIPTION /srv/shiny-server/DESCRIPTION
+COPY Calculator/renv.lock /srv/shiny-server/renv.lock
+COPY Calculator/.Rprofile /srv/shiny-server/.Rprofile
+COPY Calculator/renv/ /srv/shiny-server/renv/
+
+# Restore R package dependencies from renv.lock (reads DESCRIPTION file)
+RUN R -e "renv::restore()"
+
+# Copy the rest of the app after dependencies are installed (better caching)
+COPY Calculator/ /srv/shiny-server/
+
+# Ensure proper permissions
+RUN chown -R shiny:shiny /srv/shiny-server
+
+# Expose port for Shiny
+EXPOSE 3838
+
+# Run the Shiny app
+CMD ["R", "-e", "shiny::runApp('/srv/shiny-server', host='0.0.0.0', port=3838)"]

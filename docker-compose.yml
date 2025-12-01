@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # BCVI Calculator Shiny App
+  calculator:
+    build:
+      context: .
+      dockerfile: Dockerfile.calculator
+    image: jdpreston30/grady-bcvi-calculator:latest
+    container_name: bcvi-calculator
+    ports:
+      - "3838:3838"
+    restart: unless-stopped
+    environment:
+      - SHINY_LOG_LEVEL=INFO
+    volumes:
+      # Optional: Mount for development/debugging
+      # - ./Calculator:/srv/shiny-server
+      - shiny-logs:/var/log/shiny-server
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3838"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # BCVI Publication Analysis Environment
+  publication:
+    build:
+      context: .
+      dockerfile: Dockerfile.publication
+    image: jdpreston30/grady-bcvi-publication:latest
+    container_name: bcvi-publication
+    volumes:
+      - ./Publication:/home/analysis
+      - publication-output:/home/analysis/Outputs
+    working_dir: /home/analysis
+    command: ["R"]
+    stdin_open: true
+    tty: true
+
+volumes:
+  shiny-logs:
+  publication-output:

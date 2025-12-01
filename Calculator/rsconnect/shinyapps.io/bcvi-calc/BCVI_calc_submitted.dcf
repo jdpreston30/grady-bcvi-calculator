@@ -1,0 +1,10 @@
+name: BCVI_calc_submitted
+title:
+username: bcvi-calc
+account: bcvi-calc
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15085744
+bundleId: 10682285
+url: https://bcvi-calc.shinyapps.io/BCVI_calc_submitted/
+version: 1

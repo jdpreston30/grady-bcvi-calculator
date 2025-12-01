@@ -1,0 +1,10 @@
+name: calculator
+title:
+username: grady-bcvi-calc
+account: grady-bcvi-calc
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15095705
+bundleId: 11257946
+url: https://grady-bcvi-calc.shinyapps.io/calculator/
+version: 1

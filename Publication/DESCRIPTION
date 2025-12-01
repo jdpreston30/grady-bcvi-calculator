@@ -1,0 +1,62 @@
+Package: BCVIPublication
+Title: BCVI Stroke Risk Prediction - Publication Analysis
+Version: 1.0.0
+Authors@R: c(
+    person("Josh", "Preston", email = "jdpreston30@users.noreply.github.com", role = c("aut", "cre")),
+    person("Wagner", "et al.", role = "aut")
+    )
+Description: Reproducible analysis code for the BCVI stroke risk prediction manuscript (Wagner et al. 2025). Includes all data preprocessing, model development, and validation.
+Depends: 
+    R (>= 4.5.1)
+Imports:
+    arm,
+    BAS,
+    broom,
+    caret,
+    conflicted,
+    devtools,
+    dplyr,
+    e1071,
+    fs,
+    ggplot2,
+    ggprism,
+    ggrepel,
+    glmnet,
+    glue,
+    gridtext,
+    here,
+    iml,
+    kernlab,
+    knitr,
+    MASS,
+    mice,
+    mgcv,
+    ModelMetrics,
+    nnet,
+    openxlsx,
+    patchwork,
+    pROC,
+    progress,
+    PRROC,
+    purrr,
+    qrcode,
+    randomForest,
+    readxl,
+    rlang,
+    rsconnect,
+    rstanarm,
+    RSNNS,
+    scales,
+    shiny,
+    stringr,
+    TernTablesR,
+    tibble,
+    tidyr,
+    tidyverse,
+    xgboost
+Remotes:
+    jdpreston30/TernTablesR
+Encoding: UTF-8
+LazyData: true
+URL: https://github.com/jdpreston30/grady-bcvi-calculator
+BugReports: https://github.com/jdpreston30/grady-bcvi-calculator/issues
