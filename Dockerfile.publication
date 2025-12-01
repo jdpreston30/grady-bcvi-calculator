@@ -16,6 +16,12 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     libharfbuzz-dev \
     libfribidi-dev \
+    libcairo2-dev \
+    libgit2-dev \
+    libglpk-dev \
+    libx11-dev \
+    cmake \
+    pandoc \
     git \
     && rm -rf /var/lib/apt/lists/*
 
