@@ -82,6 +82,7 @@ run_gam_analysis <- function(data, model_label = "GAM", sampling_method = "down"
       Specificity = confmat_train$byClass["Specificity"]
     ),
     summary_cv = summary_cv,
+    metrics_cv = fold_stats,  # Add fold-level metrics for CI calculation
     preds_cv = preds_cv_tbl
   ))
 }

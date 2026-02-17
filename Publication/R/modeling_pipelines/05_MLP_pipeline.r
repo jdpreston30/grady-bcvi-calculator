@@ -84,6 +84,7 @@ run_mlp_model <- function(df, model_label = "MLP", response = "stroke", seed = 2
       Specificity = confmat_train$byClass["Specificity"]
     ),
     summary_cv = summary_cv,
+    metrics_cv = fold_stats,  # Add fold-level metrics for CI calculation
     preds_cv = preds_cv_tbl,
     mlp_fit = mlp_fit
   )

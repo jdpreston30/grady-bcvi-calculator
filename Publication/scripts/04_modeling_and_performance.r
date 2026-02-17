@@ -26,9 +26,9 @@
         MLP   = mlp_all_variants,
         Bayes = bayes_all_variants
       )
-    #- 4.3.2: Extract summary_cv from all inner slots
+    #- 4.3.2: Extract summary_cv with 95% CIs from all inner slots
       model_summary <- purrr::map_dfr(names(model_list), function(name) {
-        extract_cv_summaries(name, model_list[[name]])
+        extract_cv_summaries_with_ci(name, model_list[[name]])
       })
     #- 4.3.3: Manually specify the metadata for each model
       manual_metadata <- tribble(
@@ -73,8 +73,16 @@
         ) %>%
         left_join(manual_metadata, by = "Model") %>%
         mutate(
-          Sensitivity = paste0(round(Sensitivity * 100, 0), "%"),
-          Specificity = paste0(round(Specificity * 100, 0), "%")
+          # Format metrics with 95% CIs in brackets
+          AUC_formatted = sprintf("%.2f (%.2f-%.2f)", AUC, AUC_CI_lower, AUC_CI_upper),
+          Sensitivity_formatted = sprintf("%d%% (%d%%-%d%%)", 
+                                         round(Sensitivity * 100, 0), 
+                                         round(Sens_CI_lower * 100, 0), 
+                                         round(Sens_CI_upper * 100, 0)),
+          Specificity_formatted = sprintf("%d%% (%d%%-%d%%)", 
+                                         round(Specificity * 100, 0), 
+                                         round(Spec_CI_lower * 100, 0), 
+                                         round(Spec_CI_upper * 100, 0))
         ) %>%
         mutate(
           Sampling_Method = paste0(
@@ -89,8 +97,15 @@
         group_by(Method) %>%
         arrange(desc(Youdens_J), .by_group = TRUE) %>%
         ungroup() %>%
-        mutate(across(where(is.double) & !c(Sensitivity, Specificity), ~ round(.x, 2))) %>%
-        select(Method, Category, Feature_Selection, Youdens_J, AUC, Sensitivity, Specificity, Model, Dataset, Weighting, Downsampling, Sampling_Method) %>%
+        mutate(across(where(is.double) & !c(Sensitivity, Specificity, AUC, 
+                                             Sens_CI_lower, Sens_CI_upper, 
+                                             Spec_CI_lower, Spec_CI_upper, 
+                                             AUC_CI_lower, AUC_CI_upper), ~ round(.x, 2))) %>%
+        select(Method, Category, Feature_Selection, Youdens_J, 
+               AUC, AUC_CI_lower, AUC_CI_upper, AUC_formatted,
+               Sensitivity, Sens_CI_lower, Sens_CI_upper, Sensitivity_formatted,
+               Specificity, Spec_CI_lower, Spec_CI_upper, Specificity_formatted,
+               Model, Dataset, Weighting, Downsampling, Sampling_Method) %>%
         arrange(desc(Youdens_J)) %>%
         mutate( # Added after manual inspection and choice of model
           Chosen = if_else(
@@ -123,19 +138,25 @@
           )
         ) %>%
         arrange(desc(Youdens_J), desc(AUC))
-    #- 4.3.5: Construct and export ST3
+    #- 4.3.5: Construct and export ST3 (with 95% CIs in brackets)
       ST3 <- all_model_summary %>%
         mutate("Dataset†; Weighting; Downsampling" = paste(Dataset, Weighting, Downsampling, sep = "; ")) %>%
-        select(Method, Youdens_J, AUC, Sensitivity, Specificity, "Dataset†; Weighting; Downsampling") %>%
+        select(Method, Youdens_J, AUC_formatted, Sensitivity_formatted, Specificity_formatted, "Dataset†; Weighting; Downsampling") %>%
         rename("Machine Learning Model" = Method,
-               "Youden’s J Statistic*" = Youdens_J)
-        write.xlsx(ST3, "ST3.xlsx")
-    #- 4.3.6: Export
+               "Youden's J Statistic*" = Youdens_J,
+               "AUC (95% CI)" = AUC_formatted,
+               "Sensitivity (95% CI)" = Sensitivity_formatted,
+               "Specificity (95% CI)" = Specificity_formatted)
+       write.xlsx(ST3, "ST3.xlsx")
+    #- 4.3.6: Export T2 (with 95% CIs in brackets)
        T2 <- all_model_summary %>%
          filter(Chosen == "Y") %>%
-         select(Method, Category, Feature_Selection, Youdens_J, AUC, Sensitivity, Specificity) %>%
+         select(Method, Category, Feature_Selection, Youdens_J, AUC_formatted, Sensitivity_formatted, Specificity_formatted) %>%
          rename(
            "Machine Learning Model*" = Method,
            "Feature Selection" = Feature_Selection,
-           "Youden’s J Statistic†" = Youdens_J)
+           "Youden's J Statistic†" = Youdens_J,
+           "AUC (95% CI)" = AUC_formatted,
+           "Sensitivity (95% CI)" = Sensitivity_formatted,
+           "Specificity (95% CI)" = Specificity_formatted)
       write.xlsx(T2, "T2.xlsx") # Manually picked best model in excel

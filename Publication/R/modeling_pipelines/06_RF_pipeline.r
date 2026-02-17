@@ -74,6 +74,7 @@ run_rf_analysis <- function(data, model_label, my_seeds, sampling_method = "down
     rf_fit = rf_fit,
     summary_train = summary_train,
     summary_cv = summary_cv,
+    metrics_cv = rf_preds_cv_all,  # Add fold-level metrics for CI calculation
     preds_cv = cv_preds,
     variable_importance = varimp
   ))

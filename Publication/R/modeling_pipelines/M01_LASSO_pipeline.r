@@ -94,6 +94,7 @@ run_lasso_analysis <- function(data, model_label = "LASSO", use_weights = TRUE) 
         Sensitivity = mean(Sensitivity),
         Specificity = mean(Specificity)
       ),
+    metrics_cv = lasso_repeat_results %>% select(AUC, Sensitivity, Specificity),  # Add fold-level metrics for CI calculation
     selected_variables = selected_vars,
     preds_cv = lasso_repeat_results %>% select(truth, prob),
     lasso_fit_final = lasso_fit_final

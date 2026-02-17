@@ -103,6 +103,7 @@ run_svm_model <- function(df, response = "stroke", seed = 2025, use_weights = TR
       Specificity = confmat_train$byClass["Specificity"]
     ),
     summary_cv = summary_cv,
+    metrics_cv = cv_metrics,  # Add fold-level metrics for CI calculation
     preds_cv = cv_preds %>% select(truth = obs, prob = Y),
     svm_fit = model
   ))

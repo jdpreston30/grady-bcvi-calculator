@@ -115,6 +115,7 @@ run_xgb_analysis <- function(data, model_label = "XGBoost", repeats = 10, folds 
 
   output <- list(
     summary_cv = summary_cv,
+    metrics_cv = cv_results %>% select(AUC, Sensitivity, Specificity),  # Add fold-level metrics for CI calculation
     summary_train = summary_train,
     preds_cv = preds_cv_tbl
   )

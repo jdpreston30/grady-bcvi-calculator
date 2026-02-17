@@ -6,6 +6,11 @@ root_dir <- getwd()
   setwd(file.path(root_dir, "Publication"))
   renv::restore(prompt = FALSE)
   source("scripts/00_dependencies_and_seeds.r")
+  
+  # Configure data paths - CHANGE 'which_computer' TO SWITCH BETWEEN MACHINES
+  # Options: "laptop", "desktop", or "other" (prompts for custom paths)
+  load_raw_data(which_computer = "desktop")
+  
   source("scripts/01_import_and_preprocess.r")
   source("scripts/02_descriptive_statistics.r")
   source("scripts/03_trad_linear_modeling.r")

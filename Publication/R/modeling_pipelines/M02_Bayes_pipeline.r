@@ -122,6 +122,7 @@ run_bayeslog_model <- function(
       Specificity = confmat_train$byClass["Specificity"]
     ),
     summary_cv = summary_cv,
+    metrics_cv = metrics_cv,  # Add fold-level metrics for CI calculation
     preds_cv = preds_cv,
     bayes_fit = bayes_fit
   ))
