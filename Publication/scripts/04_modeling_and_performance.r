@@ -166,4 +166,4 @@ T2 <- all_model_summary %>%
   filter(`Machine Learning Model*` != "RF")
   #! Filtered out RF due to seed reproducibility issues as detailed in methods section
 #- 4.3.8: Export T2
-write.xlsx(T2, "Outputs/Tables/T2.xlsx") # Manually picked best model in excel
+write.xlsx(T2, "Outputs/Tables/T2.xlsx")

@@ -16,6 +16,6 @@ T3 <- ternG(
   group_var = "AT_prestroke",
   force_ordinal = "PTS",
   descriptive = TRUE,
-  output_xlsx = "T3.xlsx",
+  output_xlsx = "Outputs/Tables/T3.xlsx",
   OR_col = TRUE
 )
