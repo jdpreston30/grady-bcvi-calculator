@@ -28,3 +28,4 @@ purrr::walk(
 conflicts_prefer(dplyr::select)
 conflicts_prefer(dplyr::filter)
 conflicts_prefer(stats::lag)
+conflicts_prefer(caret::train)

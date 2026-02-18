@@ -9,7 +9,7 @@ root_dir <- getwd()
   
   # Configure data paths - CHANGE 'which_computer' TO SWITCH BETWEEN MACHINES
   # Options: "laptop", "desktop", or "other" (prompts for custom paths)
-  load_raw_data(which_computer = "desktop")
+  load_raw_data(which_computer = "laptop")
   
   source("scripts/01_import_and_preprocess.r")
   source("scripts/02_descriptive_statistics.r")

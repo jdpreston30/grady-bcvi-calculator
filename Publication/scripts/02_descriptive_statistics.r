@@ -12,26 +12,26 @@ descriptive_data <- raw_modeling_i %>%
   arrange(desc(stroke))
 #+ 2.2: Compute cohort descriptive statistics
 #- 2.2.1: Bring in other descriptive data from above
-  descriptive_data_join_1 <- descriptive_data %>%
-    select(stroke:BLV, isolated_C, isolated_V, concom_CV) %>%
+descriptive_data_join_1 <- descriptive_data %>%
+  select(stroke:BLV, isolated_C, isolated_V, concom_CV) %>%
+  mutate(
+    max_vert = na_if(max_vert, 0),
+    max_carotid = na_if(max_carotid, 0)
+  ) %>%
+  mutate(
+    BLC = case_when(
+      isolated_C == "Y" | concom_CV == "Y" ~ as.character(BLC),
+      TRUE ~ NA_character_
+    ),
+    BLV = case_when(
+      isolated_V == "Y" | concom_CV == "Y" ~ as.character(BLV),
+      TRUE ~ NA_character_
+    )
+  ) %>%
     mutate(
-      max_vert = na_if(max_vert, 0),
-      max_carotid = na_if(max_carotid, 0)
-    ) %>%
-    mutate(
-      BLC = case_when(
-        isolated_C == "Y" | concom_CV == "Y" ~ as.character(BLC),
-        TRUE ~ NA_character_
-      ),
-      BLV = case_when(
-        isolated_V == "Y" | concom_CV == "Y" ~ as.character(BLV),
-        TRUE ~ NA_character_
-      )
-    ) %>%
-      mutate(
-        BLC = factor(BLC, levels = c("N", "Y")),
-        BLV = factor(BLV, levels = c("N", "Y"))
-      )
+      BLC = factor(BLC, levels = c("N", "Y")),
+      BLV = factor(BLV, levels = c("N", "Y"))
+    )
 #- 2.2.2: Bring in descriptive data from registry and simplify CC
 #! NS238, listed as 'MVC, Pedestrian', injury was MVC -> peds v auto, categorizing as Other or NS
 # ! NS389, listed as 'Motorcycle, Pedestrian', injury was MCC -> peds v auto, categorizing as Other or NS
@@ -110,7 +110,7 @@ injury_counts <- raw %>%
 #_Now make a summary to join with main later
 injury_summary <- injury_counts %>%
   select(Cg1:Cg5, Vg1:Vg5) %>%
-  summarise(across(everything(), sum, na.rm = TRUE), .groups = "drop") %>%
+  summarise(across(everything(), \(x) sum(x, na.rm = TRUE)), .groups = "drop") %>%
   pivot_longer(everything(), names_to = "Grade", values_to = "n") %>%
   mutate(
     Vessel = case_when(
@@ -331,11 +331,12 @@ T1 <- ternD(
 #- 2.3.3: Export as excel sheet
 write.xlsx(T1, "Outputs/Tables/T1.xlsx")
 #+ 2.4: Run ternG on only the carotid injuries
-{
 #- 2.4.1: Filter to carotid and vertebral
-carotid_only <- descriptive_data %>% filter(isolated_C == "Y" | concom_CV == "Y")
-vertebral_only <- descriptive_data %>% filter(isolated_V == "Y" | concom_CV == "Y")
-#- 2.4.2: Compute the descriptive n's separately
+{
+  carotid_only <- descriptive_data %>% filter(isolated_C == "Y" | concom_CV == "Y")
+  vertebral_only <- descriptive_data %>% filter(isolated_V == "Y" | concom_CV == "Y")
+}
+#- 2.4.2: Create a function to make stroke counts for whole population
 stroke_counts <- function(df, label) {
   tab <- df %>%
     count(stroke) %>%
@@ -347,24 +348,34 @@ stroke_counts <- function(df, label) {
 
   tibble(
     Variable = label,
-    N = sprintf("%d (%.0f%%)", n_N, n_N / total * 100),
-    Y = sprintf("%d (%.0f%%)", n_Y, n_Y / total * 100),
+    N = sprintf("%d", n_N),
+    Y = sprintf("%d", n_Y),
     p = NA_character_,
     test = NA_character_,
     OR = NA_character_
   )
 }
+#- 2.4.3: Compute combined descriptive stats for totals
 combined_descriptives <- bind_rows(
   stroke_counts(descriptive_data, "All Patients"),
   stroke_counts(carotid_only, "Carotid Patients"),
   stroke_counts(vertebral_only, "Vertebral Patients")
 ) %>%
-  mutate(Vessel = case_when(
-    Variable == "Carotid Patients" ~ "Carotid",
-    Variable == "Vertebral Patients" ~ "Vertebral",
-    TRUE ~ "ALL"
-  ))
-#- 2.4.3: Run ternG for carotid results
+  mutate(
+    Vessel = case_when(
+      Variable == "Carotid Patients" ~ "Carotid",
+      Variable == "Vertebral Patients" ~ "Vertebral",
+      TRUE ~ "ALL"
+    ),
+    # Calculate Total column
+    Total = sprintf("%d", 
+      as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+"))),
+    # Create consolidated OR/p-value column (will be NA for these summary rows)
+    `OR [95% CI] or p-value*` = NA_character_
+  ) %>%
+  # Reorder columns to match ternG output
+  select(Variable, N, Y, Total, `OR [95% CI] or p-value*`, Vessel)
+#- 2.4.4: Run ternG for carotid results
 carotid_results <- ternG(
   data = carotid_only,
   vars = c("BLC", "no_MFC", "MFC_present", "max_carotid", "concom_CV","carotid_segments","tot_carotid_inj","ISS","GCS"),
@@ -375,9 +386,14 @@ carotid_results <- ternG(
   OR_col = TRUE,
   round_intg = TRUE
 ) %>%
-  select(Variable = 1, N = 2, Y = 3, p = 5, test = 7, OR = 6) %>%
-  mutate(Vessel = "Carotid")
-#- 2.4.4: Run ternG for vertebral results
+  select(Variable = 1, N = 2, Y = 3, Total = 4, p = 5, test = 7, OR = 6) %>%
+  mutate(
+    Vessel = "Carotid",
+    # Create consolidated OR/p-value column: use OR for categorical (%), p for ordinal [IQR]
+    `OR [95% CI] or p-value*` = ifelse(str_detect(N, "%"), OR, p)
+  ) %>%
+  select(Variable, N, Y, Total, `OR [95% CI] or p-value*`, Vessel)
+#- 2.4.5: Run ternG for vertebral results
 vertebral_results <- ternG(
   data = vertebral_only,
   vars = c("BLV", "no_MFV", "MFV_present", "max_vert", "concom_CV","vertebral_segments","tot_vert_inj","ISS", "GCS"),
@@ -388,149 +404,105 @@ vertebral_results <- ternG(
   OR_col = TRUE,
   round_intg = TRUE
 ) %>%
-  select(Variable = 1, N = 2, Y = 3, p = 5, test = 7, OR = 6) %>%
-  mutate(Vessel = "Vertebral")
-#- 2.4.5: Get patient counts
-vert_patients <- combined_descriptives %>% filter(Variable == "Vertebral Patients")
-carotid_patients <- combined_descriptives %>% filter(Variable == "Carotid Patients")
-all_patients <- combined_descriptives %>% filter(Variable == "All Patients")
-#- 2.4.6: Extract counts for column headers
-all_n <- as.numeric(str_extract(all_patients$N, "^[0-9]+"))
-all_y <- as.numeric(str_extract(all_patients$Y, "^[0-9]+"))
-all_total <- all_n + all_y
-all_n_pct <- round(all_n / all_total * 100)
-all_y_pct <- round(all_y / all_total * 100)
-#- 2.4.7: Combine results
-combined_results <- bind_rows(
-  # Vertebral section
-  tibble(Variable = "Vertebral", N = "", Y = "", `OR [95% CI] or p-value*` = "", Total = ""),
-  tibble(
-    Variable = "  Number of Patients",
-    N = str_extract(vert_patients$N, "^[0-9]+"),
-    Y = str_extract(vert_patients$Y, "^[0-9]+"),
-    `OR [95% CI] or p-value*` = NA_character_,
-    Total = sprintf("%s", as.numeric(str_extract(vert_patients$N, "^[0-9]+")) + as.numeric(str_extract(vert_patients$Y, "^[0-9]+")))
-  ),
-  vertebral_results %>%
-    filter(Variable == "  MFV_present") %>%
-    mutate(
-      Variable = "  Multifocal Injury",
-      `OR [95% CI] or p-value*` = OR,
-      Total = sprintf("%d (%s%%)", 
-        as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+")),
-        round((as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+"))) / 
-              (as.numeric(str_extract(vert_patients$N, "^[0-9]+")) + as.numeric(str_extract(vert_patients$Y, "^[0-9]+"))) * 100))
-    ) %>%
-    select(Variable, N, Y, `OR [95% CI] or p-value*`, Total),
-  vertebral_results %>%
-    filter(Variable == "  BLV") %>%
-    mutate(
-      Variable = "  Bilateral Injury",
-      `OR [95% CI] or p-value*` = OR,
-      Total = sprintf("%d (%s%%)", 
-        as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+")),
-        round((as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+"))) / 
-              (as.numeric(str_extract(vert_patients$N, "^[0-9]+")) + as.numeric(str_extract(vert_patients$Y, "^[0-9]+"))) * 100))
-    ) %>%
-    select(Variable, N, Y, `OR [95% CI] or p-value*`, Total),
-  vertebral_results %>%
-    filter(Variable == "  concom_CV") %>%
-    mutate(
-      Variable = "  Concomitant CBCVI",
-      `OR [95% CI] or p-value*` = OR,
-      Total = sprintf("%d (%s%%)", 
-        as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+")),
-        round((as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+"))) / 
-              (as.numeric(str_extract(vert_patients$N, "^[0-9]+")) + as.numeric(str_extract(vert_patients$Y, "^[0-9]+"))) * 100))
-    ) %>%
-    select(Variable, N, Y, `OR [95% CI] or p-value*`, Total),
-  vertebral_results %>%
-    filter(Variable == "  max_vert") %>%
-    mutate(
-      Variable = "  Median Grade (IQR)†",
-      `OR [95% CI] or p-value*` = p,
-      Total = N
-    ) %>%
-    select(Variable, N, Y, `OR [95% CI] or p-value*`, Total),
-  vertebral_results %>%
-    filter(Variable %in% c("  ISS", "  GCS")) %>%
-    mutate(
-      Variable = paste0("  ", trimws(Variable)),
-      `OR [95% CI] or p-value*` = p,
-      Total = N
-    ) %>%
-    select(Variable, N, Y, `OR [95% CI] or p-value*`, Total),
-  # Carotid section
-  tibble(Variable = "Carotid", N = "", Y = "", `OR [95% CI] or p-value*` = "", Total = ""),
-  tibble(
-    Variable = "  Number of Patients",
-    N = str_extract(carotid_patients$N, "^[0-9]+"),
-    Y = str_extract(carotid_patients$Y, "^[0-9]+"),
-    `OR [95% CI] or p-value*` = NA_character_,
-    Total = sprintf("%s", as.numeric(str_extract(carotid_patients$N, "^[0-9]+")) + as.numeric(str_extract(carotid_patients$Y, "^[0-9]+")))
-  ),
-  carotid_results %>%
-    filter(Variable == "  MFC_present") %>%
-    mutate(
-      Variable = "  Multifocal Injury",
-      `OR [95% CI] or p-value*` = OR,
-      Total = sprintf("%d (%s%%)", 
-        as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+")),
-        round((as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+"))) / 
-              (as.numeric(str_extract(carotid_patients$N, "^[0-9]+")) + as.numeric(str_extract(carotid_patients$Y, "^[0-9]+"))) * 100))
-    ) %>%
-    select(Variable, N, Y, `OR [95% CI] or p-value*`, Total),
-  carotid_results %>%
-    filter(Variable == "  BLC") %>%
-    mutate(
-      Variable = "  Bilateral Injury",
-      `OR [95% CI] or p-value*` = OR,
-      Total = sprintf("%d (%s%%)", 
-        as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+")),
-        round((as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+"))) / 
-              (as.numeric(str_extract(carotid_patients$N, "^[0-9]+")) + as.numeric(str_extract(carotid_patients$Y, "^[0-9]+"))) * 100))
-    ) %>%
-    select(Variable, N, Y, `OR [95% CI] or p-value*`, Total),
-  carotid_results %>%
-    filter(Variable == "  concom_CV") %>%
-    mutate(
-      Variable = "  Concomitant VBCVI",
-      `OR [95% CI] or p-value*` = OR,
-      Total = sprintf("%d (%s%%)", 
-        as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+")),
-        round((as.numeric(str_extract(N, "^[0-9]+")) + as.numeric(str_extract(Y, "^[0-9]+"))) / 
-              (as.numeric(str_extract(carotid_patients$N, "^[0-9]+")) + as.numeric(str_extract(carotid_patients$Y, "^[0-9]+"))) * 100))
-    ) %>%
-    select(Variable, N, Y, `OR [95% CI] or p-value*`, Total),
-  carotid_results %>%
-    filter(Variable == "  max_carotid") %>%
-    mutate(
-      Variable = "  Median Grade (IQR)†",
-      `OR [95% CI] or p-value*` = p,
-      Total = N
-    ) %>%
-    select(Variable, N, Y, `OR [95% CI] or p-value*`, Total),
-  carotid_results %>%
-    filter(Variable %in% c("  ISS", "  GCS")) %>%
-    mutate(
-      Variable = paste0("  ", trimws(Variable)),
-      `OR [95% CI] or p-value*` = p,
-      Total = N
-    ) %>%
-    select(Variable, N, Y, `OR [95% CI] or p-value*`, Total)
+  select(Variable = 1, N = 2, Y = 3, Total = 4, p = 5, test = 7, OR = 6) %>%
+  mutate(
+    Vessel = "Vertebral",
+    # Create consolidated OR/p-value column: use OR for categorical (%), p for ordinal [IQR]
+    `OR [95% CI] or p-value*` = ifelse(str_detect(N, "%"), OR, p)
+  ) %>%
+  select(Variable, N, Y, Total, `OR [95% CI] or p-value*`, Vessel)
+#- 2.4.6: Get patient counts
+{
+  vert_patients <- combined_descriptives %>% filter(Variable == "Vertebral Patients")
+  carotid_patients <- combined_descriptives %>% filter(Variable == "Carotid Patients")
+  all_patients <- combined_descriptives %>% filter(Variable == "All Patients")
+}
+#- 2.4.7: Extract counts for column headers
+{
+  all_n <- as.numeric(str_extract(all_patients$N, "^[0-9]+"))
+  all_y <- as.numeric(str_extract(all_patients$Y, "^[0-9]+"))
+  all_total <- all_n + all_y
+  all_n_pct <- round(all_n / all_total * 100)
+  all_y_pct <- round(all_y / all_total * 100)
+}
+#- 2.4.8: Combine results - simplified approach with proper ordering and headers
+combined_results_raw <- bind_rows(
+  combined_descriptives,
+  carotid_results,
+  vertebral_results
 ) %>%
-  # Rename columns with n= and percentage
+  filter(Variable != "All Patients")  # Remove All Patients row after extracting values
+#- 2.4.9: Insert a vertebral section header
+vertebral_section <- combined_results_raw %>% 
+  filter(Vessel == "Vertebral") %>%
+  filter(Variable %in% c("Vertebral Patients", "  MFV_present", "  BLV", "  concom_CV", "  max_vert", "  ISS", "  GCS")) %>%
+  mutate(Variable = case_when(
+    Variable == "Vertebral Patients" ~ "  Number of Patients",
+    Variable == "  MFV_present" ~ "  Multifocal Injury",
+    Variable == "  BLV" ~ "  Bilateral Injury",
+    Variable == "  concom_CV" ~ "  Concomitant CBCVI",
+    Variable == "  max_vert" ~ "  Median Grade (IQR)†",
+    TRUE ~ Variable
+  )) %>%
+  mutate(sort_order = case_when(
+    Variable == "  Number of Patients" ~ 1,
+    Variable == "  Multifocal Injury" ~ 2,
+    Variable == "  Bilateral Injury" ~ 3,
+    Variable == "  Concomitant CBCVI" ~ 4,
+    Variable == "  Median Grade (IQR)†" ~ 5,
+    Variable == "  ISS" ~ 6,
+    Variable == "  GCS" ~ 7,
+    TRUE ~ 99
+  )) %>%
+  arrange(sort_order) %>%
+  select(-sort_order)
+#- 2.4.10: Insert a carotid section header
+carotid_section <- combined_results_raw %>% 
+  filter(Vessel == "Carotid") %>%
+  filter(Variable %in% c("Carotid Patients", "  MFC_present", "  BLC", "  concom_CV", "  max_carotid", "  ISS", "  GCS")) %>%
+  mutate(Variable = case_when(
+    Variable == "Carotid Patients" ~ "  Number of Patients",
+    Variable == "  MFC_present" ~ "  Multifocal Injury",
+    Variable == "  BLC" ~ "  Bilateral Injury",
+    Variable == "  concom_CV" ~ "  Concomitant VBCVI",
+    Variable == "  max_carotid" ~ "  Median Grade (IQR)†",
+    TRUE ~ Variable
+  )) %>%
+  mutate(sort_order = case_when(
+    Variable == "  Number of Patients" ~ 1,
+    Variable == "  Multifocal Injury" ~ 2,
+    Variable == "  Bilateral Injury" ~ 3,
+    Variable == "  Concomitant VBCVI" ~ 4,
+    Variable == "  Median Grade (IQR)†" ~ 5,
+    Variable == "  ISS" ~ 6,
+    Variable == "  GCS" ~ 7,
+    TRUE ~ 99
+  )) %>%
+  arrange(sort_order) %>%
+  select(-sort_order)
+#- 2.4.11: Create header and blank rows
+vertebral_header <- tibble(Variable = "Vertebral", N = "", Y = "", Total = "", `OR [95% CI] or p-value*` = "", Vessel = "Header")
+carotid_header <- tibble(Variable = "Carotid", N = "", Y = "", Total = "", `OR [95% CI] or p-value*` = "", Vessel = "Header")
+blank_row <- tibble(Variable = "", N = "", Y = "", Total = "", `OR [95% CI] or p-value*` = "", Vessel = "Blank")
+#- 2.4.12: Combine in desired order
+combined_results <- bind_rows(
+  vertebral_header,
+  vertebral_section,
+  blank_row,
+  carotid_header,
+  carotid_section
+) %>%
+  select(Variable, N, Y, `OR [95% CI] or p-value*`, Total) %>%  # Reorder columns and remove Vessel
   rename(
     !!sprintf("N (n=%d, %d%%)", all_n, all_n_pct) := N,
     !!sprintf("Y (n=%d, %d%%)", all_y, all_y_pct) := Y,
     !!sprintf("Total (n=%d)", all_total) := Total
-  )      
-#- 2.4.8: Export as excel sheet
+  )
+#- 2.4.13: Export as excel sheet
 write.xlsx(combined_results, "Outputs/Tables/ST1.xlsx")
-}
 #+ 2.5: Run a GLM on the full dataset
 #- 2.5.1: Create imputed version of descriptive_data
-descriptive_data_imputed <- raw_modeling %>%
+descriptive_data_imputed_i <- raw_modeling %>%
   mutate(across(
     all_of(c(
       "stroke", "ASA", "sexM", "BLC", "BLV",
@@ -539,21 +511,55 @@ descriptive_data_imputed <- raw_modeling %>%
     )),
     ~ factor(if_else(. == 1, "Y", "N"), levels = c("N", "Y"))
   )) %>%
-  arrange(desc(stroke))
-#- 2.5.1: Create the model formula
+  arrange(desc(stroke)) |>
+  # joining in BMI and race to model in stepwise
+  left_join(descriptive_data_join_2 |> select(ID, BMI, race), by = "ID") |>
+  # Convert race to factor with White as reference category
+  mutate(race = factor(race, levels = c("White", "Black", "Other or Unknown")))
+#- 2.5.2: Impute missing BMI values using MICE (72/1197 = 6% missing)
+imp_BMI <- mice(descriptive_data_imputed_i,
+  m = 5,
+  method = "pmm",
+  seed = 2025,
+  printFlag = FALSE
+)
+#- 2.5.3: Create complete dataset from imputed values
+descriptive_data_imputed <- as_tibble(complete(imp_BMI, 1))
+# Verify no missing BMI values remain
+if(any(is.na(descriptive_data_imputed$BMI))) {
+  stop("BMI still contains missing values after imputation")
+} else {
+  message("✓ BMI imputation successful: 0 missing values")
+}
+#- 2.5.4: Create the model formula
 full_model <- glm(
   stroke ~ ASA + BLC + no_MFC + sexM + MFC_present + max_carotid + concom_CV + 
-    BLV + no_MFV + MFV_present + max_vert + ISS + GCS + age,
+    BLV + no_MFV + MFV_present + max_vert + ISS + GCS + age + race + BMI,
   data = descriptive_data_imputed, 
   family = binomial()
 )
-#- 2.5.2: Run stepAIC to pare down to simplified model
+#- 2.5.5: Run stepAIC to pare down to simplified model
 adjust_model <- stepAIC(full_model, direction = "both")
-#- 2.5.3: Compute ORs and 95% CIs
+#- 2.5.6: Compute ORs and 95% CIs
 or_ci_table <- broom::tidy(adjust_model, exponentiate = TRUE, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
   mutate(
-    `OR [95% CI]` = sprintf("%.2f [%.2f–%.2f]", estimate, conf.low, conf.high)
+    `aOR [95% CI]` = sprintf("%.2f [%.2f–%.2f]", estimate, conf.low, conf.high),
+    `p-value` = sprintf("%.0E", p.value),
+    `Model Variable` = case_when(
+      term == "max_carotid" ~ "Maximum Carotid Biffl Grade",
+      term == "ASAY" ~ "Received AT",
+      term == "max_vert" ~ "Maximum Vertebral Biffl Grade",
+      TRUE ~ term
+    ),
+    sort_order = case_when(
+      term == "max_carotid" ~ 1,
+      term == "ASAY" ~ 2,
+      term == "max_vert" ~ 3,
+      TRUE ~ 99
+    )
   ) %>%
-  select(term, `OR [95% CI]`, p.value)
-#- 2.5.4: Export the ORs and CIs
+  arrange(sort_order) %>%
+  select(`Model Variable`, `aOR [95% CI]`, `p-value`)
+#- 2.5.7: Export the ORs and CIs
 write.xlsx(or_ci_table, "Outputs/Tables/ST2.xlsx")
