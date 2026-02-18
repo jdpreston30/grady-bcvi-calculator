@@ -3,14 +3,12 @@ root_dir <- getwd()
 
 # Publication Analysis Pipeline (uses Publication renv)
 {
+  # Set up working directory and restore Publication renv environment
   setwd(file.path(root_dir, "Publication"))
   renv::restore(prompt = FALSE)
-  source("scripts/00_dependencies_and_seeds.r")
   
-  # Configure data paths - CHANGE 'which_computer' TO SWITCH BETWEEN MACHINES
-  # Options: "laptop", "desktop", or "other" (prompts for custom paths)
-  load_raw_data(which_computer = "laptop")
-  
+  # Load dependencies, seeds, and auto-detect computer/data paths from config.yaml
+  source("scripts/00_setup.r")  
   source("scripts/01_import_and_preprocess.r")
   source("scripts/02_descriptive_statistics.r")
   source("scripts/03_trad_linear_modeling.r")

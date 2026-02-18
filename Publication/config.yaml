@@ -1,0 +1,27 @@
+# Configuration file for BCVI modeling pipeline
+
+# Set to TRUE to run full modeling pipeline (computationally expensive, could take 30+ minutes)
+# Set to FALSE to load pre-computed results from Outputs/Models/all_model_results.rds
+run_modeling_pipeline: false
+
+# Model output path
+model_results_path: "Outputs/Models/all_model_results.rds"
+
+# Computer-specific data paths
+# The system will auto-detect based on username/computer name
+#! Replace this with your own personal paths if an external user is running the code. The system will auto-detect based on username/computer name, but you can also specify a custom path by calling load_config_and_paths("/your/data/path") in scripts/00_dependencies_and_seeds.r
+computers:
+  laptop:
+    user: "jdp2019"
+    base_path: "/Users/jdp2019/Desktop/grady-bcvi-calculator"
+    data_path: "/Users/jdp2019/Library/CloudStorage/OneDrive-Emory/Research/Manuscripts and Projects/Grady/Risk Calculator/Raw Data"
+  
+  desktop:
+    user: "JoshsMacbook2015"
+    base_path: "/Users/JoshsMacbook2015/Desktop/grady-bcvi-calculator"
+    data_path: "/Users/JoshsMacbook2015/Library/CloudStorage/OneDrive-EmoryUniversity/Research/Manuscripts and Projects/Grady/Risk Calculator/Raw Data"
+
+# Data file names (relative to data_path)
+data_files:
+  raw_path: "merged_data_DI.xlsx"
+  descriptive_merged: "descriptive_merged.xlsx"

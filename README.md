@@ -45,7 +45,7 @@ docker pull jdpreston30/grady-bcvi-calculator:publication
 docker run -it -v $(pwd)/output:/home/analysis/Outputs jdpreston30/grady-bcvi-calculator:publication
 
 # Inside the container, run the analysis:
-source("scripts/00_dependencies_and_seeds.r")
+source("scripts/00_setup.r")
 source("scripts/01_import_and_preprocess.r")
 # ... etc
 ```
@@ -59,6 +59,40 @@ docker-compose up              # Both
 
 ### Option 2: Local R Installation
 
+#### Prerequisites
+- R >= 4.5.1
+- Data files (see **Data Setup** below)
+
+#### Data Setup
+
+The analysis requires raw data files that are **not included** in this repository due to privacy constraints. 
+
+**For Project Authors (Josh/Victoria):**
+The pipeline automatically detects your computer (laptop vs desktop) and uses the correct data paths from Dropbox. No manual configuration needed.
+
+**For External Users:**
+You have two options:
+
+1. **Add your computer to `config.yaml`:**
+   ```yaml
+   computers:
+     my_computer:
+       user: "your_username"
+       base_path: "/path/to/grady-bcvi-calculator"
+       data_path: "/path/to/your/data"
+   ```
+   The auto-detection will then work based on your username.
+
+2. **Use a custom data path:**
+   Edit `Publication/scripts/00_setup.r` line 29:
+   ```r
+   config <- load_config_and_paths(custom_data_path = "/your/custom/path/to/data")
+   ```
+
+**Required Data Files:**
+- `merged_data_DI.xlsx` - Main patient/injury data (assigned to `raw_path` variable)
+- `descriptive_merged.xlsx` - Merged descriptive statistics
+
 #### Run Everything (Automated)
 ```bash
 # From root directory - runs full pipeline then launches calculator
@@ -67,9 +101,22 @@ Rscript run_all.R
 
 This script automatically:
 1. Restores packages for Publication (via renv)
-2. Runs all 9 analysis scripts in order
-3. Restores packages for Calculator (via renv)
-4. Launches the Shiny app in your browser
+2. Auto-detects your computer and loads data paths from `config.yaml`
+3. Runs all 9 analysis scripts in order (or loads pre-computed models if configured)
+4. Restores packages for Calculator (via renv)
+5. Launches the Shiny app in your browser
+
+#### Configuration Options
+
+Edit `config.yaml` to customize behavior:
+
+```yaml
+# Set to true to run full modeling pipeline (~hours)
+# Set to false to load pre-computed results (default, uses included .rds file)
+run_modeling_pipeline: false
+```
+
+The repository includes pre-computed model results (`Outputs/Models/all_model_results.rds`) so you can skip the computationally expensive modeling step.
 
 #### Manual Setup
 

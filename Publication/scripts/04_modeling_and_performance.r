@@ -1,9 +1,11 @@
 #* 4: Run multiple modeling methods
 #+ 4.1: Run master pipeline
+#! Conditional execution handled inside function per the yaml config settings
 all_model_results <- run_all_modeling(
   ml_modeling_data = ml_modeling_data,
   my_seeds_rf = my_seeds_rf,
-  seed = 2025
+  seed = 2025,
+  config = config
 )
 #+ 4.2: Extract each model's results for use below (optional unpacking)
 lasso_all_variants <- all_model_results$lasso
@@ -24,6 +26,7 @@ model_list <- list(
   MLP   = mlp_all_variants,
   Bayes = bayes_all_variants
 )
+saveRDS(model_list, "Outputs/Models/model_list.rds") # Save model list for later use in CI calculation and summary table construction
 #- 4.3.2: Extract summary_cv with 95% CIs from all inner slots
 model_summary <- purrr::map_dfr(names(model_list), function(name) {
   extract_cv_summaries_with_ci(name, model_list[[name]])

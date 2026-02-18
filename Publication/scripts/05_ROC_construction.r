@@ -76,4 +76,4 @@ roc_list_interpolated <- roc_list %>%
   ) %>%
   arrange(FPR)
 #+ 5.5: Export to CSV for Prism
-write.csv(roc_list_interpolated, "1B.csv", row.names = FALSE)
+write.csv(roc_list_interpolated, "Outputs/Figures/1B.csv", row.names = FALSE)

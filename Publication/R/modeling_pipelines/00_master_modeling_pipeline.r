@@ -3,9 +3,30 @@ run_all_modeling <- function(
     ml_modeling_data,
     my_seeds_rf,
     seed = 2025,
-    which_models = "all", # <-- NEW arg
-    save_dir = here::here("Publication", "Outputs", "modeling_pipeline_checkpoints"),
+    config = NULL,
+    which_models = "all",
+    save_dir = "Outputs/modeling_pipeline_checkpoints",
     cleanup_checkpoints = TRUE) {
+  
+  # --- Conditional execution logic ---
+  # If config provided, check if we should load pre-computed results instead
+  if (!is.null(config)) {
+    model_results_path <- config$model_results_path
+    
+    if (!config$run_modeling_pipeline) {
+      # Load pre-computed results
+      if (!file.exists(model_results_path)) {
+        stop(paste0("ERROR: ", model_results_path, " not found. Set run_modeling_pipeline: true in config.yaml or ensure the RDS file exists."))
+      }
+      message(paste0("Loading pre-computed model results from ", model_results_path, "..."))
+      all_model_results <- readRDS(model_results_path)
+      message("✓ Model results loaded successfully")
+      return(all_model_results)
+    } else {
+      message("Running full modeling pipeline (this may take several hours)...")
+    }
+  }
+  
   # --- Load modeling functions ---
   purrr::walk(
     c(
@@ -97,9 +118,15 @@ run_all_modeling <- function(
 
   # --- Save results ---
   if (identical(which_models, "all")) {
-    saveRDS(results, here::here("Publication", "Outputs", "all_models.rds"))
+    saveRDS(results, "Outputs/Models/all_models.rds")
   } else {
-    saveRDS(results, here::here("Publication", "Outputs", "selected_models.rds"))
+    saveRDS(results, "Outputs/Models/selected_models.rds")
+  }
+  
+  # Also save to config path if provided
+  if (!is.null(config)) {
+    saveRDS(results, config$model_results_path)
+    message(paste0("✓ Model results saved to ", config$model_results_path))
   }
 
   if (cleanup_checkpoints) {
