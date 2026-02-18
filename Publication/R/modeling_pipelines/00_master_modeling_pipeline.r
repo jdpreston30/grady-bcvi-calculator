@@ -117,13 +117,7 @@ run_all_modeling <- function(
   }
 
   # --- Save results ---
-  if (identical(which_models, "all")) {
-    saveRDS(results, "Outputs/Models/all_models.rds")
-  } else {
-    saveRDS(results, "Outputs/Models/selected_models.rds")
-  }
-  
-  # Also save to config path if provided
+  # Only save to config path (all_model_results.rds) - single source of truth
   if (!is.null(config)) {
     saveRDS(results, config$model_results_path)
     message(paste0("✓ Model results saved to ", config$model_results_path))

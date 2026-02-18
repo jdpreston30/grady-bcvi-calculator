@@ -1,8 +1,8 @@
 #* 8: Equation construction
 #+ 8.1: Load required objects
-coefs_tbl <- readRDS("Calculator/lasso_weighted_coefs.rds")
+coefs_tbl <- readRDS("../Calculator/data/lasso_weighted_coefs.rds")
 coefs_named <- setNames(coefs_tbl$Coefficient, coefs_tbl$Variable)
-platt_model <- readRDS("Calculator/platt_model.rds")
+platt_model <- readRDS("../Calculator/data/platt_model.rds")
 #+ 8.2: Rebuild logit equation string from coefs_tbl
 #- 8.2.1: Function to build eqn
 build_logit_equation <- function(coefs) {

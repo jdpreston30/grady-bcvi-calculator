@@ -9,7 +9,7 @@ server <- function(input, output, session) {
 
   # Text for disclaimer
 
-  disclaimer_text <- "<strong>Note: This clinical tool is designed for healthcare professionals and is for informational purposes only.<br>Predictions are estimates based on a model that has not yet been externally validated.<br>This tool does not offer medical advice nor guarantee that a specific event will or will not occur.<br>This model is preliminary and is not a replacement for clinical judgement.</strong><br><br>
+  disclaimer_text <- "<strong>Note: This clinical tool is designed for healthcare professionals and is for informational purposes only.<br>Predictions are estimates based on a model that has not yet been externally validated.<br>Predictions outside the training age range (12-97 years) represent extrapolations and should be interpreted with caution.<br>This tool does not offer medical advice nor guarantee that a specific event will or will not occur.<br>This model is preliminary and is not a replacement for clinical judgement.</strong><br><br>
     For further details, see the published manuscript associated with this work
     (<a href='https://pubmed.ncbi.nlm.nih.gov/40555567/' target='_blank'>Wagner et al. 2025</a>;
     <a href='https://doi.org/10.1234/example2' target='_blank'>Wagner et al. 2025</a>).<br>

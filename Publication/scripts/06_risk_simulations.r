@@ -1,8 +1,11 @@
 #* 6: Risk Simulations
 #+ 6.1: Setup and preparation
-#- 6.1.1: Set model shortcut
+#- 6.1.1: Create rf_xgb dataset (needed for mean age calculation)
+rf_xgb <- ml_modeling_data %>%
+  select(-c(tot_vert_inj, max_carotid, tot_carotid_inj, max_vert), -ID)
+#- 6.1.2: Set model shortcut
 model_obj <- lasso_all_variants$weighted
-#- 6.1.2: Fit Platt scaling model from CV predictions
+#- 6.1.3: Fit Platt scaling model from CV predictions
 cv_preds <- model_obj$preds_cv %>%
   filter(!is.na(prob), !is.na(truth)) %>%
   mutate(truth_bin = as.numeric(truth == "Y"))
@@ -80,6 +83,5 @@ ggplot(plot_data, aes(x = injury_grade, y = platt_scaled_prob, color = scenario,
 #+ 6.5: Export data, plot in Prism
 write.csv(plot_data, "1C.csv", row.names = FALSE)
 #+ 6.6: Prepare models to be exported for risk calculator
-saveRDS(model_obj$selected_variables, "lasso_weighted_coefs.rds") # raw coefficients
-saveRDS(platt_model, "platt_model.rds") # platt model
-#! Moved to Calculator folder
+saveRDS(model_obj$selected_variables, "../Calculator/data/lasso_weighted_coefs.rds") # raw coefficients
+saveRDS(platt_model, "../Calculator/data/platt_model.rds") # platt model

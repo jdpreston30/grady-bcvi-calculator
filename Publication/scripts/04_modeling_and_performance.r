@@ -26,7 +26,6 @@ model_list <- list(
   MLP   = mlp_all_variants,
   Bayes = bayes_all_variants
 )
-saveRDS(model_list, "Outputs/Models/model_list.rds") # Save model list for later use in CI calculation and summary table construction
 #- 4.3.2: Extract summary_cv with 95% CIs from all inner slots
 model_summary <- purrr::map_dfr(names(model_list), function(name) {
   extract_cv_summaries_with_ci(name, model_list[[name]])
@@ -140,6 +139,7 @@ all_model_summary <- model_summary %>%
     )
   ) 
 #- 4.3.5: Construct and export ST3 (with 95% CIs in brackets)
+#! Note that when running on desktop, results are consistent with the original submission; however, when running on laptop, they differ slightly. Therefore, for the publication results, we will use desktop-generated results only.
 ST3 <- all_model_summary %>%
   mutate("Dataset†; Weighting; Downsampling" = paste(Dataset, Weighting, Downsampling, sep = "; ")) %>%
   select(Method, Youdens_J, AUC_formatted, Sensitivity_formatted, Specificity_formatted, "Dataset†; Weighting; Downsampling") %>%

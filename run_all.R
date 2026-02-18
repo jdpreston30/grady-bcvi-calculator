@@ -27,4 +27,3 @@ root_dir <- getwd()
   source("deploy/run_and_deploy.r")
   setwd(root_dir)
 }
-

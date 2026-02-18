@@ -18,11 +18,11 @@ library(shiny)
 runApp()
 
 # Deploy to shinyapps.io (uncomment to deploy)
-# setwd("Calculator")
-# renv::restore()
-# rsconnect::deployApp(
-#   appDir = ".",
-#   appName = "Calculator",
-#   account = "grady-bcvi-calc",
-#   forceUpdate = TRUE
-# )
+setwd("Calculator")
+renv::restore()
+rsconnect::deployApp(
+  appDir = ".",
+  appName = "Calculator",
+  account = "grady-bcvi-calc",
+  forceUpdate = TRUE
+)
