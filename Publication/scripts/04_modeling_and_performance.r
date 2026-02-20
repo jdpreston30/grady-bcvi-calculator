@@ -124,7 +124,7 @@ all_model_summary <- model_summary %>%
     )
   ) %>%
   mutate(
-    Youdens_J = round(Youdens_J, 2),  # Round after all sorting is complete
+    # Youdens_J left at full precision in all_model_summary; rounded only in table exports (ST3, T2)
     Dataset = case_when(
       Dataset == "Simple" ~ "Simplified",
       Dataset == "Full" ~ "Complete",
@@ -141,7 +141,8 @@ all_model_summary <- model_summary %>%
 #- 4.3.5: Construct and export ST3 (with 95% CIs in brackets)
 #! Note that when running on desktop, results are consistent with the original submission; however, when running on laptop, they differ slightly. Therefore, for the publication results, we will use desktop-generated results only.
 ST3 <- all_model_summary %>%
-  mutate("Dataset†; Weighting; Downsampling" = paste(Dataset, Weighting, Downsampling, sep = "; ")) %>%
+  mutate("Dataset†; Weighting; Downsampling" = paste(Dataset, Weighting, Downsampling, sep = "; "),
+         Youdens_J = round(Youdens_J, 2)) %>%
   select(Method, Youdens_J, AUC_formatted, Sensitivity_formatted, Specificity_formatted, "Dataset†; Weighting; Downsampling") %>%
   rename("Machine Learning Model" = Method,
           "Youden's J Statistic*" = Youdens_J,
@@ -156,6 +157,7 @@ write.xlsx(ST3, "Outputs/Tables/ST3.xlsx")
 #- 4.3.7: Structure T2
 T2 <- all_model_summary %>%
   filter(Chosen == "Y") %>%
+  mutate(Youdens_J = round(Youdens_J, 2)) %>%
   select(Method, Category, Feature_Selection, Youdens_J, AUC_formatted, Sensitivity_formatted, Specificity_formatted) %>%
   rename(
     "Machine Learning Model*" = Method,

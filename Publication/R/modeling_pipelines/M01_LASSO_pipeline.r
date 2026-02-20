@@ -21,7 +21,7 @@ run_lasso_analysis <- function(data, model_label = "LASSO", use_weights = TRUE) 
     rep(1, length(y_factor))
   }
   # CV Repeats
-  lasso_repeat_results <- purrr::map_dfr(1:10, function(i) {
+  lasso_repeat_results <- purrr::map(1:10, function(i) {
     set.seed(2025 + i)
     foldid <- caret::createFolds(y_factor, k = 10, list = FALSE)
 
@@ -31,27 +31,52 @@ run_lasso_analysis <- function(data, model_label = "LASSO", use_weights = TRUE) 
       alpha = 1,
       type.measure = "auc",
       foldid = foldid,
-      weights = weights
+      weights = weights,
+      keep = TRUE  # Store held-out fold predictions in fit.preval
     )))
 
+    # --- In-sample predictions (for preds_cv / ROC / Platt — unchanged) ---
     lasso_prob <- predict(lasso_fit, newx = X, s = "lambda.min", type = "response")
     lasso_pred <- ifelse(lasso_prob > 0.5, "Y", "N")
 
-    suppressMessages(suppressWarnings({
-      confmat <- caret::confusionMatrix(factor(lasso_pred, levels = c("N", "Y")), y_factor, positive = "Y")
-      auc_val <- pROC::auc(y_factor, as.vector(lasso_prob))
-    }))
+    # --- True held-out fold predictions (for performance metrics only) ---
+    lambda_idx <- which(lasso_fit$lambda == lasso_fit$lambda.min)
+    cv_linear_pred <- lasso_fit$fit.preval[, lambda_idx]
+    cv_prob <- 1 / (1 + exp(-cv_linear_pred))  # inverse logit
 
-    tibble::tibble(
-      rep = i,
-      lambda_min = lasso_fit$lambda.min,
-      AUC = as.numeric(auc_val),
-      Sensitivity = confmat$byClass["Sensitivity"],
-      Specificity = confmat$byClass["Specificity"],
-      truth = as.character(y_factor),
-      prob = as.vector(lasso_prob)
+    # Per-fold held-out metrics (1:1 with caret-based methods)
+    fold_metrics <- purrr::map_dfr(sort(unique(foldid)), function(k) {
+      fold_idx <- which(foldid == k)
+      fold_truth <- y_factor[fold_idx]
+      fold_prob <- cv_prob[fold_idx]
+      fold_pred <- factor(ifelse(fold_prob > 0.5, "Y", "N"), levels = c("N", "Y"))
+      suppressMessages(suppressWarnings({
+        confmat <- caret::confusionMatrix(fold_pred, fold_truth, positive = "Y")
+        auc_val <- tryCatch(as.numeric(pROC::auc(fold_truth, fold_prob)),
+                            error = function(e) NA_real_)
+      }))
+      tibble::tibble(
+        rep = i, fold = k,
+        AUC = auc_val,
+        Sensitivity = confmat$byClass["Sensitivity"],
+        Specificity = confmat$byClass["Specificity"]
+      )
+    })
+
+    # Return both: fold_metrics for performance, full-dataset probs for preds_cv
+    list(
+      fold_metrics = fold_metrics,
+      preds = tibble::tibble(
+        rep = i,
+        truth = as.character(y_factor),
+        prob = as.vector(lasso_prob)  # in-sample — intentionally kept for ROC/Platt
+      )
     )
   })
+
+  # Separate fold-level metrics from prediction data
+  all_fold_metrics <- purrr::map_dfr(lasso_repeat_results, "fold_metrics")
+  all_preds <- purrr::map_dfr(lasso_repeat_results, "preds")
   # Final model fit
   final_foldid <- caret::createFolds(y_factor, k = 10, list = FALSE)
   lasso_fit_final <- suppressMessages(suppressWarnings(glmnet::cv.glmnet(
@@ -84,19 +109,19 @@ run_lasso_analysis <- function(data, model_label = "LASSO", use_weights = TRUE) 
       Sensitivity = confmat_train$byClass["Sensitivity"],
       Specificity = confmat_train$byClass["Specificity"]
     ),
-    summary_cv = lasso_repeat_results %>%
+    summary_cv = all_fold_metrics %>%
       summarise(
         Model = paste(
           model_label, "(CV Prediction, Realistic)",
           if (use_weights) "+ weights" else ""
         ),
-        AUC = mean(AUC),
-        Sensitivity = mean(Sensitivity),
-        Specificity = mean(Specificity)
+        AUC = mean(AUC, na.rm = TRUE),
+        Sensitivity = mean(Sensitivity, na.rm = TRUE),
+        Specificity = mean(Specificity, na.rm = TRUE)
       ),
-    metrics_cv = lasso_repeat_results %>% select(AUC, Sensitivity, Specificity),  # Add fold-level metrics for CI calculation
+    metrics_cv = all_fold_metrics %>% select(AUC, Sensitivity, Specificity),  # 100 fold-level obs (1:1 with caret methods)
     selected_variables = selected_vars,
-    preds_cv = lasso_repeat_results %>% select(truth, prob),
+    preds_cv = all_preds %>% select(truth, prob),  # In-sample predictions — unchanged for ROC/Platt
     lasso_fit_final = lasso_fit_final
   ))
 }

@@ -21,7 +21,7 @@ root_dir <- getwd()
   setwd(root_dir)
 }
 
-
+source("scripts/supplementary_analysis/lasso_cv_comparison.r")
 # Launch Calculator (uses Calculator renv)
 {
   setwd(file.path(root_dir, "Calculator"))

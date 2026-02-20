@@ -2,7 +2,7 @@
 
 # Set to TRUE to run full modeling pipeline (computationally expensive, could take 30+ minutes)
 # Set to FALSE to load pre-computed results from Outputs/Models/all_model_results.rds
-run_modeling_pipeline: false
+run_modeling_pipeline: true
 
 # Model output path
 model_results_path: "Outputs/Models/all_model_results.rds"
