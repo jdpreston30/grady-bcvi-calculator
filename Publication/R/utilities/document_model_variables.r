@@ -104,6 +104,10 @@ document_model_variables <- function(ml_modeling_data) {
   cat("=== Detailed Variable Documentation Table ===\n\n")
   print(variable_documentation, n = Inf)
   
+  # Export the detailed table to Excel
+  write.xlsx(variable_documentation, "Outputs/Tables/variable_documentation.xlsx")
+  cat("\n✓ Exported to Outputs/Tables/variable_documentation.xlsx\n")
+  
   # Return the tibble invisibly for further use if needed
   invisible(variable_documentation)
 }
