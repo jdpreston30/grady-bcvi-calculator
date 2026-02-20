@@ -54,8 +54,10 @@ Rscript run_all.R
 
 ### Option 3: Use Docker (Recommended for Reproducibility)
 
+Pre-built images are available on [Docker Hub](https://hub.docker.com/r/jdpreston30/grady-bcvi-calculator) for immediate use, or build locally:
+
 ```bash
-# Build images
+# Build images locally
 docker compose build
 
 # Run calculator
@@ -66,7 +68,7 @@ docker compose up calculator
 docker compose up publication
 ```
 
-**Pull pre-built images:**
+**Pull pre-built images from Docker Hub:**
 ```bash
 docker pull jdpreston30/grady-bcvi-calculator:calculator
 docker pull jdpreston30/grady-bcvi-calculator:publication
@@ -177,8 +179,8 @@ Raw data are **not included** in this repository. A **deidentified dataset** is 
 ## 🔗 Links
 
 - **Live Calculator:** [https://grady-bcvi-calc.shinyapps.io/calculator/](https://grady-bcvi-calc.shinyapps.io/calculator/)
-- **GitHub:** [https://github.com/jdpreston30/grady-bcvi-calculator](https://github.com/jdpreston30/grady-bcvi-calculator)
-- **Docker Hub:** [https://hub.docker.com/r/jdpreston30/grady-bcvi-calculator](https://hub.docker.com/r/jdpreston30/grady-bcvi-calculator)
+- **GitHub Repository:** [https://github.com/jdpreston30/grady-bcvi-calculator](https://github.com/jdpreston30/grady-bcvi-calculator)
+- **Docker Hub (Pre-built Images):** [https://hub.docker.com/r/jdpreston30/grady-bcvi-calculator](https://hub.docker.com/r/jdpreston30/grady-bcvi-calculator)
 - **Manuscript:** TBD (In Review)
 - **Original Study:** [Am J Surg 2025;248:116480](https://doi.org/10.1016/j.amjsurg.2025.116480)
 
