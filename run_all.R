@@ -17,6 +17,7 @@ root_dir <- getwd()
   source("scripts/06_risk_simulations.r")
   source("scripts/07_asa_timing.r")
   source("scripts/08_equations.r")
+  source("scripts/09_stratification.r")
   setwd(root_dir)
 }
 
