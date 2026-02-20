@@ -98,8 +98,8 @@ The `Publication/scripts/` folder contains 10 scripts that generate all manuscri
 | `09_stratification.r` | Exploratory PPV/NPV stratification analysis | - |
 
 **Tables:** T1-T3 (manuscript), ST1-ST3 (supplementary) → `Publication/Outputs/Tables/`  
-**Figures:** Data exported to CSVs → `Publication/Outputs/Figures/`, final publication figures created in GraphPad Prism (`Publication/Figures.prism`)  
-**Models:** → `Publication/Outputs/Models/`
+**Figures:** R scripts export CSVs → `Publication/Outputs/Figures/`, final publication figures created in `Publication/Figures.prism` (GraphPad Prism)  
+**Models:** `all_model_results.rds` (pre-computed) → `Publication/Outputs/Models/`
 
 ---
 
