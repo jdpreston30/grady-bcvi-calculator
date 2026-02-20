@@ -1,6 +1,6 @@
 # BCVI Stroke Risk Prediction Calculator
 
-Reproducible research compendium for the BCVI (Blunt Cerebrovascular Injury) stroke risk prediction model. This repository contains both the **interactive web calculator** and the **complete analysis code** from Wagner et al. (2026, manuscript in review).
+Reproducible research compendium for blunt cerebrovascular injury (BCVI) stroke risk prediction model and calculator. This repository contains both the **interactive web calculator** and the **complete analysis code** from Wagner et al. (2026, manuscript in review).
 
 **🌐 Live Calculator:** [https://grady-bcvi-calc.shinyapps.io/calculator/](https://grady-bcvi-calc.shinyapps.io/calculator/)
 
@@ -15,7 +15,11 @@ grady-bcvi-calculator/
 │   └── renv.lock           # Exact package versions
 ├── Publication/            # Complete analysis pipeline
 │   ├── scripts/            # 10 analysis scripts (00-09)
+│   ├── R/
+│   │   ├── modeling_pipelines/  # Training scripts for ML models
+│   │   └── utilities/           # Utility/Helper functions
 │   ├── Outputs/            # Tables, figures, models
+│   ├── Figures.prism       # GraphPad Prism file for publication figures
 │   ├── config.yaml         # Computer-specific paths
 │   └── renv.lock           # Exact package versions
 ├── run_all.R               # Master pipeline script
@@ -83,18 +87,18 @@ The `Publication/scripts/` folder contains 10 scripts that generate all manuscri
 | Script | Description | Output |
 |--------|-------------|--------|
 | `00_setup.r` | Load packages, detect data paths | - |
-| `01_import_and_preprocess.r` | Clean and prepare data | - |
-| `02_descriptive_statistics.r` | Summary statistics | T1, ST1, ST2 |
-| `03_trad_linear_modeling.r` | Logistic regression | - |
-| `04_modeling_and_performance.r` | ML models | ST3, T2 |
-| `05_ROC_construction.r` | ROC curves | Figures |
-| `06_risk_simulations.r` | Risk stratification | Figures |
-| `07_asa_timing.r` | ASA timing analysis | T3 |
-| `08_equations.r` | Model equations | - |
-| `09_stratification.r` | PPV/NPV analysis | - |
+| `01_import_and_preprocess.r` | Data cleaning and preprocessing | - |
+| `02_descriptive_statistics.r` | Cohort descriptive statistics | T1, ST1, ST2 |
+| `03_trad_linear_modeling.r` | Traditional logistic regression | - |
+| `04_modeling_and_performance.r` | Train ML models (runs pipelines in `R/modeling_pipelines/`) | ST3, T2 |
+| `05_ROC_construction.r` | Generate ROC curves | Figures |
+| `06_risk_simulations.r` | Stroke risk simulations and predictions | Figures |
+| `07_asa_timing.r` | ASA timing stratified by stroke occurrence | T3 |
+| `08_equations.r` | Extract final model equations | - |
+| `09_stratification.r` | PPV/NPV stratification analysis | - |
 
 **Tables:** T1-T3 (manuscript), ST1-ST3 (supplementary) → `Publication/Outputs/Tables/`  
-**Figures:** → `Publication/Outputs/Figures/`  
+**Figures:** Data exported to CSVs by R scripts, final publication figures created in GraphPad Prism (`Figures.prism`)  
 **Models:** → `Publication/Outputs/Models/`
 
 ---
@@ -119,7 +123,9 @@ renv::restore()  # In Calculator/ or Publication/
 - **renv.lock** files specify exact package versions (including GitHub commits)
 - **Docker images** provide identical environments across systems (linux/amd64)
 - **config.yaml** centralizes computer-specific paths with auto-detection
-- **Pre-computed models** (`all_model_results.rds`) skip expensive computations (toggle in `config.yaml`)
+- **Pre-computed models** (`all_model_results.rds`) skip expensive computations (set `run_modeling_pipeline: false` in `config.yaml`)
+
+**Development environment:** macOS 14.5, R 4.5.1, Docker 28.5.2
 
 ---
 
@@ -139,19 +145,18 @@ renv::restore()  # In Calculator/ or Publication/
 **Original cohort study:**  
 Please also cite the foundational work on a subset of this cohort:
 
-> Wagner, V.E., Preston, J.D., De Leon Castro, A., Adams, R.W., Garcia-Toca, M., Nguyen, J., Benjamin, E.R., Todd, S.R., & Sciarretta, J.D. (2025). A blunt look at stroke risk in BCVI: Do multiple injuries increase the risk of stroke? *The American Journal of Surgery*, 248, 116480. [https://doi.org/10.1016/j.amjsurg.2025.116480](https://doi.org/10.1016/j.amjsurg.2025.116480)
+> Wagner, V., Preston, J.D., De Leon Castro, A., Adams, R.W., Garcia-Toca, M., Nguyen, J., Benjamin, E.R., Todd, S.R., & Sciarretta, J.D. (2025). A blunt look at stroke risk in BCVI: Do multiple injuries increase the risk of stroke? *The American Journal of Surgery*, 248, 116480. [https://doi.org/10.1016/j.amjsurg.2025.116480](https://doi.org/10.1016/j.amjsurg.2025.116480)
 
 ```bibtex
 @article{wagner2025cohort,
   title={A blunt look at stroke risk in {BCVI}: Do multiple injuries increase the risk of stroke?},
-  author={Wagner, Victoria E. and Preston, Joshua D. and De Leon Castro, Alejandro and Adams, Ronnie W. and Garcia-Toca, Manuel and Nguyen, Jonathan and Benjamin, Elizabeth R. and Todd, S. Rob and Sciarretta, Jason D.},
+  author={Wagner, Victoria and Preston, Joshua D. and De Leon Castro, Alejandro and Adams, Ronnie W. and Garcia-Toca, Manuel and Nguyen, Jonathan and Benjamin, Elizabeth R. and Todd, S. Rob and Sciarretta, Jason D.},
   journal={The American Journal of Surgery},
   volume={248},
   pages={116480},
   year={2025},
   issn={0002-9610},
-  doi={10.1016/j.amjsurg.2025.116480},
-  url={https://www.sciencedirect.com/science/article/pii/S0002961025003034}
+  doi={10.1016/j.amjsurg.2025.116480}
 }
 ```
 
