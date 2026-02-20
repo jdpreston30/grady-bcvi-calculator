@@ -239,6 +239,8 @@ clinical_export <- ST_risk_strata_excel %>%
 #- 9.9.2: Add approach identifier to tertile table (using rounded excel version)
 tertile_export <- tertile_table_excel %>%
   mutate(`Stratum Approach` = "Tertile", .before = 1)
-#- 9.9.3: Combine and export
+#- 9.9.3: Combine, view, and export
 threshold_comparison <- bind_rows(clinical_export, tertile_export)
+cat("\n=== Threshold Comparison (not shown in manuscript) ===\n")
+print(threshold_comparison, n = Inf)
 write.xlsx(threshold_comparison, "Outputs/Tables/thresholds_not_shown.xlsx")

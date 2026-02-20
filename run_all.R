@@ -21,6 +21,7 @@ root_dir <- getwd()
   setwd(root_dir)
 }
 
+
 # Launch Calculator (uses Calculator renv)
 {
   setwd(file.path(root_dir, "Calculator"))

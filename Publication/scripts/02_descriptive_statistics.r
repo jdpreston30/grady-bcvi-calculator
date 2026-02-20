@@ -328,7 +328,9 @@ T1 <- ternD(
     result
   } %>%
   select(-rownum)
-#- 2.3.3: Export as excel sheet
+#- 2.3.3: View and export as excel sheet
+cat("\n=== Table 1 (T1) ===\n")
+print(T1, n = Inf)
 write.xlsx(T1, "Outputs/Tables/T1.xlsx")
 #+ 2.4: Run ternG on only the carotid injuries
 #- 2.4.1: Filter to carotid and vertebral
@@ -498,7 +500,9 @@ combined_results <- bind_rows(
     !!sprintf("Y (n=%d, %d%%)", all_y, all_y_pct) := Y,
     !!sprintf("Total (n=%d)", all_total) := Total
   )
-#- 2.4.13: Export as excel sheet
+#- 2.4.13: View and export as excel sheet
+cat("\n=== Supplementary Table 1 (ST1) ===\n")
+print(combined_results, n = Inf)
 write.xlsx(combined_results, "Outputs/Tables/ST1.xlsx")
 #+ 2.5: Run a GLM on the full dataset
 #- 2.5.1: Create imputed version of descriptive_data
@@ -561,5 +565,7 @@ or_ci_table <- broom::tidy(adjust_model, exponentiate = TRUE, conf.int = TRUE) %
   ) %>%
   arrange(sort_order) %>%
   select(`Model Variable`, `aOR [95% CI]`, `p-value`)
-#- 2.5.7: Export the ORs and CIs
+#- 2.5.7: View and export the ORs and CIs
+cat("\n=== Supplementary Table 2 (ST2) ===\n")
+print(or_ci_table, n = Inf)
 write.xlsx(or_ci_table, "Outputs/Tables/ST2.xlsx")

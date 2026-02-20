@@ -149,7 +149,9 @@ ST3 <- all_model_summary %>%
           "Sensitivity (95% CI)" = Sensitivity_formatted,
           "Specificity (95% CI)" = Specificity_formatted) |>
   filter(`Machine Learning Model` != "RF")
-#- 4.3.6: Export ST3
+#- 4.3.6: View and export ST3
+cat("\n=== Supplementary Table 3 (ST3) ===\n")
+print(ST3, n = Inf)
 write.xlsx(ST3, "Outputs/Tables/ST3.xlsx")
 #- 4.3.7: Structure T2
 T2 <- all_model_summary %>%
@@ -165,7 +167,9 @@ T2 <- all_model_summary %>%
   ) |>
   filter(`Machine Learning Model*` != "RF")
   #! Filtered out RF due to seed reproducibility issues as detailed in methods section
-#- 4.3.8: Export T2
+#- 4.3.8: View and export T2
+cat("\n=== Table 2 (T2) ===\n")
+print(T2, n = Inf)
 write.xlsx(T2, "Outputs/Tables/T2.xlsx")
 #+ 4.4: Document variables and interactions used by each modeling method
 document_model_variables(ml_modeling_data)
