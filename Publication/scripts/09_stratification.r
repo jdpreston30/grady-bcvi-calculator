@@ -125,3 +125,87 @@ cat("\n=== Risk Stratification and Predictive Performance ===\n\n")
 print(ST_risk_strata_display, n = Inf)
 #- 9.7.2: Export to Excel (with rounded whole numbers)
 write.xlsx(ST_risk_strata_excel, "Outputs/Tables/ST4.xlsx")
+#+ 9.8: COMPARISON - Data-Driven Tertile Approach
+#- 9.8.1: Calculate tertile cutoffs
+cat("\n\n=== COMPARISON: Data-Driven Tertile Approach ===\n\n")
+tertile_cutoffs <- quantile(stratification_df$platt_prob, probs = c(0, 1/3, 2/3, 1))
+cat(sprintf("Tertile cutoffs: %.1f%%, %.1f%%, %.1f%%\n\n", 
+            tertile_cutoffs[2] * 100, 
+            tertile_cutoffs[3] * 100, 
+            tertile_cutoffs[4] * 100))
+#- 9.8.2: Assign tertile-based strata
+tertile_labels <- c(
+  sprintf("Low (<%0.1f%%)", tertile_cutoffs[2] * 100),
+  sprintf("Moderate (%0.1f-%0.1f%%)", tertile_cutoffs[2] * 100, tertile_cutoffs[3] * 100),
+  sprintf("High (≥%0.1f%%)", tertile_cutoffs[3] * 100)
+)
+#- 9.8.3: Make tertile-based dataframe
+tertile_df <- stratification_df %>%
+  mutate(
+    risk_stratum = cut(platt_prob, 
+                       breaks = tertile_cutoffs,
+                       labels = tertile_labels,
+                       include.lowest = TRUE)
+  )
+#- 9.8.4: Calculate metrics for each tertile
+tertile_metrics <- tertile_df %>%
+  group_by(risk_stratum) %>%
+  summarise(
+    n_patients = n(),
+    n_strokes = sum(truth_bin),
+    observed_rate = mean(truth_bin),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    pct_of_total = n_patients / sum(n_patients) * 100
+  )
+#- 9.8.5: Calculate threshold metrics for tertiles
+tertile_threshold_metrics <- tibble(
+  risk_stratum = tertile_labels,
+  threshold = c(NA, tertile_cutoffs[2], tertile_cutoffs[3])
+) %>%
+  rowwise() %>%
+  mutate(
+    tp = ifelse(is.na(threshold), NA_real_, 
+                sum(tertile_df$platt_prob >= threshold & tertile_df$truth_bin == 1)),
+    fp = ifelse(is.na(threshold), NA_real_,
+                sum(tertile_df$platt_prob >= threshold & tertile_df$truth_bin == 0)),
+    tn = ifelse(is.na(threshold), NA_real_,
+                sum(tertile_df$platt_prob < threshold & tertile_df$truth_bin == 0)),
+    fn = ifelse(is.na(threshold), NA_real_,
+                sum(tertile_df$platt_prob < threshold & tertile_df$truth_bin == 1)),
+    
+    sensitivity = tp / (tp + fn),
+    specificity = tn / (tn + fp),
+    ppv = tp / (tp + fp),
+    npv = tn / (tn + fn)
+  ) %>%
+  ungroup() %>%
+  select(risk_stratum, sensitivity, specificity, ppv, npv)
+#- 9.8.6: Combine and format tertile table
+tertile_table <- tertile_metrics %>%
+  left_join(tertile_threshold_metrics, by = "risk_stratum") %>%
+  mutate(
+    observed_display = sprintf("%d (%.2f%%)", n_strokes, observed_rate * 100),
+    pct_of_total_display = sprintf("%.2f%%", pct_of_total),
+    sensitivity_display = ifelse(is.na(sensitivity), "-", sprintf("%.2f%%", sensitivity * 100)),
+    specificity_display = ifelse(is.na(specificity), "-", sprintf("%.2f%%", specificity * 100)),
+    ppv_display = ifelse(is.na(ppv), "-", sprintf("%.2f%%", ppv * 100)),
+    npv_display = ifelse(is.na(npv), "-", sprintf("%.2f%%", npv * 100))
+  ) %>%
+  mutate(
+    `N Patients (%)` = sprintf("%d (%s)", n_patients, pct_of_total_display)
+  ) %>%
+  select(
+    `Risk Stratum` = risk_stratum,
+    `N Patients (%)`,
+    `Observed Strokes` = observed_display,
+    `Sensitivity` = sensitivity_display,
+    `Specificity` = specificity_display,
+    `PPV` = ppv_display,
+    `NPV` = npv_display
+  )
+#- 9.8.7: Print tertile comparison
+cat("=== Tertile-Based Risk Stratification ===\n")
+cat("(Equal sample sizes per stratum)\n\n")
+print(tertile_table, n = Inf)
