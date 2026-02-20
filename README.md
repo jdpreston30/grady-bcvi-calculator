@@ -95,10 +95,10 @@ The `Publication/scripts/` folder contains 10 scripts that generate all manuscri
 | `06_risk_simulations.r` | Stroke risk simulations and predictions | Figures |
 | `07_asa_timing.r` | ASA timing stratified by stroke occurrence | T3 |
 | `08_equations.r` | Extract final model equations | - |
-| `09_stratification.r` | PPV/NPV stratification analysis | - |
+| `09_stratification.r` | Exploratory PPV/NPV stratification analysis | - |
 
 **Tables:** T1-T3 (manuscript), ST1-ST3 (supplementary) → `Publication/Outputs/Tables/`  
-**Figures:** Data exported to CSVs by R scripts, final publication figures created in GraphPad Prism (`Figures.prism`)  
+**Figures:** Data exported to CSVs → `Publication/Outputs/Figures/`, final publication figures created in GraphPad Prism (`Publication/Figures.prism`)  
 **Models:** → `Publication/Outputs/Models/`
 
 ---
@@ -109,7 +109,7 @@ Both projects use **renv** for exact version locking. See `DESCRIPTION` and `ren
 
 **Key packages:**
 - **Calculator:** shiny, dplyr, ggplot2, patchwork, ggprism
-- **Publication:** All calculator packages PLUS caret, xgboost, randomForest, rstanarm, mice, TernTablesR (GitHub: jdpreston30/TernTablesR)
+- **Publication:** All calculator packages PLUS caret, xgboost, randomForest, rstanarm, mice, [TernTablesR](https://github.com/jdpreston30/TernTablesR) (GitHub: jdpreston30/TernTablesR)
 
 **Install:**
 ```r
