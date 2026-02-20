@@ -1,4 +1,5 @@
 #* 9: Risk Stratification and Clinical Utility Metrics
+#! Not ultimately included in manuscript, but providing here for context
 #+ 9.1: Define risk strata thresholds
 #! Strata: Low (<10%), Moderate (10-30%), High (≥30%)
 #! Justification: Clinically interpretable cutpoints with clear separation in observed outcomes
@@ -119,12 +120,10 @@ ST_risk_strata_excel <- risk_stratification_table %>%
     )
   ) %>%
   select(-`Percent of Total`)
-#+ 9.7: Display and export table
+#+ 9.7: Display table
 #- 9.7.1: Print to console (with 2 decimal precision)
 cat("\n=== Risk Stratification and Predictive Performance ===\n\n")
 print(ST_risk_strata_display, n = Inf)
-#- 9.7.2: Export to Excel (with rounded whole numbers)
-write.xlsx(ST_risk_strata_excel, "Outputs/Tables/ST4.xlsx")
 #+ 9.8: COMPARISON - Data-Driven Tertile Approach
 #- 9.8.1: Calculate tertile cutoffs
 cat("\n\n=== COMPARISON: Data-Driven Tertile Approach ===\n\n")
@@ -183,6 +182,7 @@ tertile_threshold_metrics <- tibble(
   ungroup() %>%
   select(risk_stratum, sensitivity, specificity, ppv, npv)
 #- 9.8.6: Combine and format tertile table
+#- 9.8.6.1: Display version (2 decimals)
 tertile_table <- tertile_metrics %>%
   left_join(tertile_threshold_metrics, by = "risk_stratum") %>%
   mutate(
@@ -205,7 +205,40 @@ tertile_table <- tertile_metrics %>%
     `PPV` = ppv_display,
     `NPV` = npv_display
   )
+#- 9.8.6.2: Excel version (rounded whole numbers)
+tertile_table_excel <- tertile_metrics %>%
+  left_join(tertile_threshold_metrics, by = "risk_stratum") %>%
+  mutate(
+    observed_excel = sprintf("%d (%.0f%%)", n_strokes, rounder(observed_rate * 100, 0)),
+    pct_of_total_excel = sprintf("%.0f%%", rounder(pct_of_total, 0)),
+    sensitivity_excel = ifelse(is.na(sensitivity), "-", sprintf("%.0f%%", rounder(sensitivity * 100, 0))),
+    specificity_excel = ifelse(is.na(specificity), "-", sprintf("%.0f%%", rounder(specificity * 100, 0))),
+    ppv_excel = ifelse(is.na(ppv), "-", sprintf("%.0f%%", rounder(ppv * 100, 0))),
+    npv_excel = ifelse(is.na(npv), "-", sprintf("%.0f%%", rounder(npv * 100, 0)))
+  ) %>%
+  mutate(
+    `N Patients (%)` = sprintf("%d (%s)", n_patients, pct_of_total_excel)
+  ) %>%
+  select(
+    `Risk Stratum` = risk_stratum,
+    `N Patients (%)`,
+    `Observed Strokes` = observed_excel,
+    `Sensitivity` = sensitivity_excel,
+    `Specificity` = specificity_excel,
+    `PPV` = ppv_excel,
+    `NPV` = npv_excel
+  )
 #- 9.8.7: Print tertile comparison
 cat("=== Tertile-Based Risk Stratification ===\n")
 cat("(Equal sample sizes per stratum)\n\n")
 print(tertile_table, n = Inf)
+#+ 9.9: Combine both approaches and export for reference
+#- 9.9.1: Add approach identifier to clinical table (using rounded excel version)
+clinical_export <- ST_risk_strata_excel %>%
+  mutate(`Stratum Approach` = "Clinical", .before = 1)
+#- 9.9.2: Add approach identifier to tertile table (using rounded excel version)
+tertile_export <- tertile_table_excel %>%
+  mutate(`Stratum Approach` = "Tertile", .before = 1)
+#- 9.9.3: Combine and export
+threshold_comparison <- bind_rows(clinical_export, tertile_export)
+write.xlsx(threshold_comparison, "Outputs/Tables/thresholds_not_shown.xlsx")
