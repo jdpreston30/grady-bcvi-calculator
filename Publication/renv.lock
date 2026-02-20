@@ -763,10 +763,10 @@
       ],
       "RemoteType": "github",
       "RemoteHost": "api.github.com",
-      "RemoteRepo": "TernTablesR",
       "RemoteUsername": "jdpreston30",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "3d7577757b196255469e605e0686b5646728aab6"
+      "RemoteRepo": "TernTablesR",
+      "RemoteRef": "main",
+      "RemoteSha": "d8ae27a63c179f04b185269b5d88806b04ec3b16"
     },
     "abind": {
       "Package": "abind",

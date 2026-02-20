@@ -5,7 +5,7 @@ Authors@R: c(
     person("Josh", "Preston", email = "jdpreston30@users.noreply.github.com", role = c("aut", "cre")),
     person("Wagner", "et al.", role = "aut")
     )
-Description: Reproducible analysis code for the BCVI stroke risk prediction manuscript (Wagner et al. 2025). Includes all data preprocessing, model development, and validation.
+Description: Reproducible analysis code for the BCVI stroke risk prediction manuscript (Wagner et al. 2026). Includes all data preprocessing, model development, and cross-validation.
 Depends: 
     R (>= 4.5.1)
 Imports:

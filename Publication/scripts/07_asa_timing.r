@@ -90,24 +90,30 @@ T3 <- T3_i |>
       .x
     }
   ) |>
-  # Step 6: Round p values to 2 decimals
+  # Step 6: Round p values to 2 decimals (preserve scientific notation for very small values)
   mutate(
     p = case_when(
       p == "-" ~ "-",
       p == "" ~ "",
       TRUE ~ {
         p_numeric <- suppressWarnings(as.numeric(p))
-        if_else(is.na(p_numeric), p, sprintf("%.2f", p_numeric))
+        if_else(
+          is.na(p_numeric), 
+          p, 
+          if_else(p_numeric < 0.01, p, sprintf("%.2f", p_numeric))  # Keep scientific notation if < 0.01
+        )
       }
     )
   ) |>
   # Step 7: Rename p column to add dagger
-  rename(`p value†` = p) |>
-  # Step 8: Select final columns in specified order
+  rename(`p-value†` = p) |>
+  # Step 8: Remove duplicate "   AT Choice" row (keep only "AT Choice" without spaces)
+  filter(`Category: Variable: Stratified Variable` != "   AT Choice") |>
+  # Step 9: Select final columns in specified order
   select(`Category: Variable: Stratified Variable`, 
          starts_with("AT Initiated Pre-Stroke"), 
          starts_with("AT Initiated Post-Stroke"), 
-         `p value†`, 
+         `p-value†`, 
          starts_with("Total"))
 
 #+ 7.4: View and export formatted table
