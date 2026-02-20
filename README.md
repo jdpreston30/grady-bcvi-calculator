@@ -1,6 +1,6 @@
-# BCVI Stroke Risk Prediction
+# BCVI Stroke Risk Prediction Calculator
 
-Reproducible research compendium for the BCVI (Blunt Cerebrovascular Injury) stroke risk prediction model. This repository contains both the **interactive web calculator** and the **complete analysis code** from Wagner et al. (2025, manuscript in review).
+Reproducible research compendium for the BCVI (Blunt Cerebrovascular Injury) stroke risk prediction model. This repository contains both the **interactive web calculator** and the **complete analysis code** from Wagner et al. (2026, manuscript in review).
 
 **🌐 Live Calculator:** [https://grady-bcvi-calc.shinyapps.io/calculator/](https://grady-bcvi-calc.shinyapps.io/calculator/)
 
@@ -10,10 +10,10 @@ Reproducible research compendium for the BCVI (Blunt Cerebrovascular Injury) str
 
 ```
 grady-bcvi-calculator/
-├── Calculator/              # Shiny web application
+├── Calculator/             # Shiny web application
 │   ├── R/, data/, www/     # Code, models, assets
 │   └── renv.lock           # Exact package versions
-├── Publication/             # Complete analysis pipeline
+├── Publication/            # Complete analysis pipeline
 │   ├── scripts/            # 10 analysis scripts (00-09)
 │   ├── Outputs/            # Tables, figures, models
 │   ├── config.yaml         # Computer-specific paths
@@ -27,7 +27,7 @@ grady-bcvi-calculator/
 
 ## 🚀 Quick Start
 
-### Option 1: Run the Calculator Locally
+### Option 1: Build the Calculator Locally
 
 ```bash
 cd Calculator
@@ -35,7 +35,7 @@ R -e "install.packages('renv'); renv::restore()"
 R -e "shiny::runApp()"
 ```
 
-### Option 2: Run Full Analysis Pipeline
+### Option 2: Run Full Analysis Pipeline and Build the Calculator
 
 ```bash
 # From root directory
@@ -43,14 +43,14 @@ Rscript run_all.R
 ```
 
 **Requirements:**
-- R >= 4.5.1
+- R ≥ 4.5.1
 - Data files (see [Data Availability](#-data-availability))
-- Auto-detects paths via `Publication/config.yaml`
+- Update data paths in `Publication/config.yaml` for your system
 
 **What it does:**
 1. Restores R packages (via renv)
 2. Runs all 10 analysis scripts (generates tables/figures)
-3. Launches calculator locally
+3. Builds and launches calculator locally
 
 ### Option 3: Use Docker (Recommended for Reproducibility)
 
@@ -157,8 +157,8 @@ Please also cite the foundational work on a subset of this cohort:
 
 ## 👥 Authors
 
-- **Victoria E. Wagner, MD** - First/Corresponding Author (UTHealth Houston – McGovern School of Medicine, Department of Surgery / Red Duke Trauma Institute) - [ORCID: 0009-0005-6287-9078](https://orcid.org/0009-0005-6287-9078)
-- **Joshua D. Preston** - Data Science, Development, & Repository Maintainer (Emory University School of Medicine, Department of Surgery) ([@jdpreston30](https://github.com/jdpreston30)) - [ORCID: 0000-0001-9834-3017](https://orcid.org/0000-0001-9834-3017)
+- **Victoria E. Wagner, MD** - First/Corresponding Author (UTHealth Houston – McGovern School of Medicine, Department of Surgery / Red Duke Trauma Institute) [[ORCID]](https://orcid.org/0009-0005-6287-9078)
+- **Joshua D. Preston** - Data Science, Development, & Repository Maintainer (Emory University School of Medicine, Department of Surgery) ([@jdpreston30](https://github.com/jdpreston30)) [[ORCID]](https://orcid.org/0000-0001-9834-3017)
 - **Jason D. Sciarretta, MD** - Senior Author (Emory University School of Medicine, Department of Surgery / Grady Memorial Hospital)
 
 ---
