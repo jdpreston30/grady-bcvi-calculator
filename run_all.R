@@ -21,12 +21,6 @@ root_dir <- getwd()
   setwd(root_dir)
 }
 
-output <- capture.output({
-  source("scripts/01_import_and_preprocess.r")
-  source("scripts/02_descriptive_statistics.r")
-  source("scripts/03_trad_linear_modeling.r")
-})
-writeLines(output, "output.txt")
 # Launch Calculator (uses Calculator renv)
 {
   setwd(file.path(root_dir, "Calculator"))
