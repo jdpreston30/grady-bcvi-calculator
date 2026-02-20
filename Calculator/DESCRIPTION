@@ -2,8 +2,9 @@ Package: BCVICalculator
 Title: BCVI Stroke Risk Prediction Calculator
 Version: 1.0.0
 Authors@R: c(
-    person("Josh", "Preston", email = "jdpreston30@users.noreply.github.com", role = c("aut", "cre")),
-    person("Wagner", "et al.", role = "aut")
+    person("Victoria E.", "Wagner", email = "Victoria.E.Wagner@uth.tmc.edu", role = c("aut", "cph"), comment = c(ORCID = "0009-0005-6287-9078")),
+    person("Joshua D.", "Preston", email = "joshua.preston@emory.edu", role = c("aut", "cre"), comment = c(ORCID = "0000-0001-9834-3017")),
+    person("Jason D.", "Sciarretta", role = "aut")
     )
 Description: Interactive Shiny application for calculating stroke risk in patients with blunt cerebrovascular injury (BCVI). Implements the prediction model from Wagner et al. 2025.
 Depends: 

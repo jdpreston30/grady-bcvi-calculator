@@ -157,8 +157,8 @@ Please also cite the foundational work on a subset of this cohort:
 
 ## 👥 Authors
 
-- **Victoria E. Wagner, MD** - First/Corresponding Author (UTHealth Houston – McGovern School of Medicine, Department of Surgery / Red Duke Trauma Institute)
-- **Joshua D. Preston** - Data Science, Development, & Repository Maintainer (Emory University School of Medicine, Department of Surgery) ([@jdpreston30](https://github.com/jdpreston30))
+- **Victoria E. Wagner, MD** - First/Corresponding Author (UTHealth Houston – McGovern School of Medicine, Department of Surgery / Red Duke Trauma Institute) - [ORCID: 0009-0005-6287-9078](https://orcid.org/0009-0005-6287-9078)
+- **Joshua D. Preston** - Data Science, Development, & Repository Maintainer (Emory University School of Medicine, Department of Surgery) ([@jdpreston30](https://github.com/jdpreston30)) - [ORCID: 0000-0001-9834-3017](https://orcid.org/0000-0001-9834-3017)
 - **Jason D. Sciarretta, MD** - Senior Author (Emory University School of Medicine, Department of Surgery / Grady Memorial Hospital)
 
 ---
