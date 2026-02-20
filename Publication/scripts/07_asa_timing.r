@@ -43,7 +43,6 @@ T3_i <- ternG(
   round_intg = TRUE,
   category_start = c("Presentation to Stroke (h)" = "Event Timing", "AT Choice" = "AT Choice"),
 )
-
 #+ 7.3: Format tibble for export
 T3 <- T3_i |>
   # Step 1: Update .indent values
@@ -115,7 +114,6 @@ T3 <- T3_i |>
          starts_with("AT Initiated Post-Stroke"), 
          `p-value†`, 
          starts_with("Total"))
-
 #+ 7.4: View and export formatted table
 cat("\n=== Table 3 (T3) ===\n")
 print(T3, n = Inf)

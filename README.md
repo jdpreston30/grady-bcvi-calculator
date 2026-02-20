@@ -1,12 +1,12 @@
 # BCVI Stroke Risk Prediction
 
-Reproducible research compendium for the BCVI (Blunt Cerebrovascular Injury) stroke risk prediction model. This repository contains both the **interactive web calculator** and the **complete analysis code** from Wagner et al. (2025).
+Reproducible research compendium for the BCVI (Blunt Cerebrovascular Injury) stroke risk prediction model. This repository contains both the **interactive web calculator** and the **complete analysis code** from Wagner et al. (2026).
 
 ## 📋 Repository Structure
 
 ```
 grady-bcvi-calculator/
-├── Calculator/          # Interactive Shiny web application
+├── Calculator/         # Interactive Shiny web application
 │   ├── R/              # Modular R code (models, plotting)
 │   ├── data/           # Model coefficients (.rds files)
 │   ├── www/            # Static assets (images, CSS)
@@ -17,7 +17,7 @@ grady-bcvi-calculator/
 │   ├── DESCRIPTION     # Package dependencies
 │   └── renv.lock       # Exact package versions
 │
-├── Publication/         # Complete reproducible analysis
+├── Publication/        # Complete reproducible analysis
 │   ├── R/              # Analysis utilities and modeling functions
 │   ├── scripts/        # 10 main analysis scripts (00-09)
 │   ├── Outputs/        # Generated figures, tables, and models
@@ -28,7 +28,7 @@ grady-bcvi-calculator/
 │   ├── DESCRIPTION     # Package dependencies
 │   └── renv.lock       # Exact package versions
 │
-├── run_all.R            # Master script to run entire pipeline
+├── run_all.R                # Master script to run entire pipeline
 ├── Dockerfile.calculator    # Calculator Docker image
 ├── Dockerfile.publication   # Publication Docker image
 └── docker-compose.yml       # Orchestration for both
@@ -63,7 +63,7 @@ source("scripts/01_import_and_preprocess.r")
 ```bash
 docker-compose up calculator    # Just the app
 docker-compose up publication   # Just the analysis
-docker-compose up              # Both
+docker-compose up               # Both
 ```
 
 ### Option 2: Local R Installation
