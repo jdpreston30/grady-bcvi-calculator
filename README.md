@@ -108,8 +108,8 @@ The `Publication/scripts/` folder contains 10 scripts that generate all manuscri
 Both projects use **renv** for exact version locking. See `DESCRIPTION` and `renv.lock` files in each subfolder.
 
 **Key packages:**
-- **Calculator:** shiny, dplyr, ggplot2, patchwork, ggprism
-- **Publication:** All calculator packages PLUS caret, xgboost, randomForest, rstanarm, mice, [TernTablesR](https://github.com/jdpreston30/TernTablesR) (GitHub: jdpreston30/TernTablesR)
+- **Calculator:** shiny, dplyr, ggplot2, patchwork, ggprism, among others
+- **Publication:** All calculator packages PLUS caret, xgboost, randomForest, rstanarm, mice, [TernTablesR](https://github.com/jdpreston30/TernTablesR), among others
 
 **Install:**
 ```r
@@ -132,47 +132,26 @@ renv::restore()  # In Calculator/ or Publication/
 ## 📖 Citation
 
 **This calculator/model (manuscript in review):**
-```bibtex
-@article{wagner2026ml,
-  title={A MACHINE-LEARNING-BASED TOOL FOR STROKE RISK PREDICTION IN BLUNT CEREBROVASCULAR INJURY: DEVELOPMENT AND PRELIMINARY EVALUATION},
-  author={Wagner, Victoria E. and Preston, Joshua D. and Sciarretta, Jason D. and others},
-  journal={TBD},
-  year={2026},
-  note={In Review}
-}
-```
 
-**Original cohort study:**  
-Please also cite the foundational work on a subset of this cohort:
+Wagner V, Preston JD, De Leon Castro A, Mueller WF, Nguyen J, Garcia-Toca M, Benjamin ER, Todd SR, Sciarretta JD. A Machine-Learning-Based Tool for Stroke Risk Prediction in Blunt Cerebrovascular Injury: Development and Preliminary Evaluation. *In Review*.
 
-> Wagner, V., Preston, J.D., De Leon Castro, A., Adams, R.W., Garcia-Toca, M., Nguyen, J., Benjamin, E.R., Todd, S.R., & Sciarretta, J.D. (2025). A blunt look at stroke risk in BCVI: Do multiple injuries increase the risk of stroke? *The American Journal of Surgery*, 248, 116480. [https://doi.org/10.1016/j.amjsurg.2025.116480](https://doi.org/10.1016/j.amjsurg.2025.116480)
+**Original cohort study:**
 
-```bibtex
-@article{wagner2025cohort,
-  title={A blunt look at stroke risk in {BCVI}: Do multiple injuries increase the risk of stroke?},
-  author={Wagner, Victoria and Preston, Joshua D. and De Leon Castro, Alejandro and Adams, Ronnie W. and Garcia-Toca, Manuel and Nguyen, Jonathan and Benjamin, Elizabeth R. and Todd, S. Rob and Sciarretta, Jason D.},
-  journal={The American Journal of Surgery},
-  volume={248},
-  pages={116480},
-  year={2025},
-  issn={0002-9610},
-  doi={10.1016/j.amjsurg.2025.116480}
-}
-```
+Wagner V, Preston JD, De Leon Castro A, Adams RW, Garcia-Toca M, Nguyen J, Benjamin ER, Todd SR, Sciarretta JD. A blunt look at stroke risk in BCVI: Do multiple injuries increase the risk of stroke? Am J Surg. 2025 Oct;248:116480. [doi: 10.1016/j.amjsurg.2025.116480](https://doi.org/10.1016/j.amjsurg.2025.116480). Epub 2025 Jun 11. [PMID: 40555567](https://pubmed.ncbi.nlm.nih.gov/40555567/); PMCID: PMC12286624.
 
 ---
 
 ## 👥 Authors
 
-- **Victoria E. Wagner, MD** - First/Corresponding Author (UTHealth Houston – McGovern School of Medicine, Department of Surgery / Red Duke Trauma Institute) [[ORCID]](https://orcid.org/0009-0005-6287-9078)
+- **Victoria E. Wagner** - First/Corresponding Author (UTHealth Houston – McGovern School of Medicine, Department of Surgery / Red Duke Trauma Institute) [[ORCID]](https://orcid.org/0009-0005-6287-9078)
 - **Joshua D. Preston** - Data Science, Development, & Repository Maintainer (Emory University School of Medicine, Department of Surgery) ([@jdpreston30](https://github.com/jdpreston30)) [[ORCID]](https://orcid.org/0000-0001-9834-3017)
-- **Jason D. Sciarretta, MD** - Senior Author (Emory University School of Medicine, Department of Surgery / Grady Memorial Hospital)
+- **Jason D. Sciarretta** - Senior Author (Emory University School of Medicine, Department of Surgery / Grady Memorial Hospital)
 
 ---
 
 ## 📂 Data Availability
 
-Raw data are **not included** in this repository. A **deidentified dataset** is available from the corresponding authors upon reasonable request for research purposes, subject to:
+Raw data are **not included** in this repository. A **deidentified dataset** is available upon reasonable request for research purposes, subject to:
 - Appropriate data use agreements
 - Institutional Review Board approval
 - HIPAA compliance
