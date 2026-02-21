@@ -63,13 +63,18 @@ run_lasso_analysis <- function(data, model_label = "LASSO", use_weights = TRUE) 
       )
     })
 
-    # Return both: fold_metrics for performance, full-dataset probs for preds_cv
+    # Return fold_metrics, in-sample preds (Platt), and held-out preds (ROC)
     list(
       fold_metrics = fold_metrics,
       preds = tibble::tibble(
         rep = i,
         truth = as.character(y_factor),
-        prob = as.vector(lasso_prob)  # in-sample — intentionally kept for ROC/Platt
+        prob = as.vector(lasso_prob)  # in-sample — kept for Platt scaling
+      ),
+      preds_heldout = tibble::tibble(
+        rep = i,
+        truth = as.character(y_factor),
+        prob = cv_prob  # held-out via fit.preval — for ROC curve
       )
     )
   })
@@ -77,6 +82,7 @@ run_lasso_analysis <- function(data, model_label = "LASSO", use_weights = TRUE) 
   # Separate fold-level metrics from prediction data
   all_fold_metrics <- purrr::map_dfr(lasso_repeat_results, "fold_metrics")
   all_preds <- purrr::map_dfr(lasso_repeat_results, "preds")
+  all_preds_heldout <- purrr::map_dfr(lasso_repeat_results, "preds_heldout")
   # Final model fit
   final_foldid <- caret::createFolds(y_factor, k = 10, list = FALSE)
   lasso_fit_final <- suppressMessages(suppressWarnings(glmnet::cv.glmnet(
@@ -121,7 +127,8 @@ run_lasso_analysis <- function(data, model_label = "LASSO", use_weights = TRUE) 
       ),
     metrics_cv = all_fold_metrics %>% select(AUC, Sensitivity, Specificity),  # 100 fold-level obs (1:1 with caret methods)
     selected_variables = selected_vars,
-    preds_cv = all_preds %>% select(truth, prob),  # In-sample predictions — unchanged for ROC/Platt
+    preds_cv = all_preds %>% select(truth, prob),  # In-sample predictions — for Platt scaling (script 06)
+    preds_cv_heldout = all_preds_heldout %>% select(truth, prob),  # Held-out predictions — for ROC curve (script 05)
     lasso_fit_final = lasso_fit_final
   ))
 }

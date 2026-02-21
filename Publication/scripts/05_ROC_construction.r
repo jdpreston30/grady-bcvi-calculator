@@ -3,10 +3,9 @@
 roc_data <- bind_rows(
   mlp_all_variants$full_down$preds_cv %>% mutate(model = "MLP_full_down"),
   gam_all_variants$simpl_down$preds_cv %>% mutate(model = "GAM_simpl_down"),
-  rf_all_variants$rf_down_full$preds_cv %>% mutate(model = "RF_rf_down_full"),
   bayes_all_variants$full_down$preds_cv %>% mutate(model = "Bayes_full_down"),
   svm_all_variants$simpl_downsampled$preds_cv %>% mutate(model = "SVM_simpl_downsampled"),
-  lasso_all_variants$weighted$preds_cv %>% mutate(model = "LASSO_weighted"),
+  lasso_all_variants$weighted$preds_cv_heldout %>% mutate(model = "LASSO_weighted"),  # held-out predictions for consistent ROC
   xgb_all_variants$simpl_down_only$preds_cv %>% mutate(model = "XGB_simpl_down_only")
 )
 #+ 5.2: Create ROC list with relevant info for each model
@@ -33,7 +32,6 @@ model_label_map <- c(
   "SVM_simpl_downsampled" = "SVM",
   "Bayes_full_down"       = "BLR",
   "GAM_simpl_down"        = "GAM",
-  "RF_rf_down_full"       = "RF",
   "XGB_simpl_down_only" = "GBM",
   "MLP_full_down" = "MLP"
 )

@@ -1,12 +1,11 @@
 # Save root directory
 root_dir <- getwd()
-
 # Publication Analysis Pipeline (uses Publication renv)
 {
   # Set up working directory and restore Publication renv environment
   setwd(file.path(root_dir, "Publication"))
   renv::restore(prompt = FALSE)
-  
+
   # Load dependencies, seeds, and auto-detect computer/data paths from config.yaml
   source("scripts/00_setup.r")  
   source("scripts/01_import_and_preprocess.r")
