@@ -4,6 +4,8 @@ Reproducible research compendium for blunt cerebrovascular injury (BCVI) stroke 
 
 **🌐 Live Calculator:** [https://grady-bcvi-calc.shinyapps.io/calculator/](https://grady-bcvi-calc.shinyapps.io/calculator/)
 
+**📄 Wagner et al. 2026:** [https://pubmed.ncbi.nlm.nih.gov/41961261/](https://pubmed.ncbi.nlm.nih.gov/41961261/)
+
 ---
 
 ## 📋 Repository Structure
