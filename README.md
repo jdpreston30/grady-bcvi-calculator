@@ -167,8 +167,8 @@ Raw data are **not included** in this repository. A **deidentified dataset** is 
 - **Live Calculator:** [https://grady-bcvi-calc.shinyapps.io/calculator/](https://grady-bcvi-calc.shinyapps.io/calculator/)
 - **GitHub Repository:** [https://github.com/jdpreston30/grady-bcvi-calculator](https://github.com/jdpreston30/grady-bcvi-calculator)
 - **Docker Hub (Pre-built Images):** [https://hub.docker.com/r/jdpreston30/grady-bcvi-calculator](https://hub.docker.com/r/jdpreston30/grady-bcvi-calculator)
-- **Manuscript:** [Eur J Trauma Emerg Surg. 2026;52(1):123](https://doi.org/10.1007/s00068-026-03172-x)
-- **Original Study:** [Am J Surg 2025;248:116480](https://doi.org/10.1016/j.amjsurg.2025.116480)
+- **Manuscript:** [Eur J Trauma Emerg Surg. 2026;52(1):123](https://pubmed.ncbi.nlm.nih.gov/41961261/)
+- **Original Study:** [Am J Surg 2025;248:116480](https://pubmed.ncbi.nlm.nih.gov/40555567/)
 
 ---
 
