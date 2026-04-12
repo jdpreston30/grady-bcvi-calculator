@@ -1,6 +1,6 @@
 # BCVI Stroke Risk Prediction Calculator
 
-Reproducible research compendium for blunt cerebrovascular injury (BCVI) stroke risk prediction model and calculator. This repository contains both the **interactive web calculator** and the **complete analysis code** from Wagner et al. (2026, manuscript in review).
+Reproducible research compendium for blunt cerebrovascular injury (BCVI) stroke risk prediction model and calculator. This repository contains both the **interactive web calculator** and the **complete analysis code** from Wagner et al. (2026).
 
 **🌐 Live Calculator:** [https://grady-bcvi-calc.shinyapps.io/calculator/](https://grady-bcvi-calc.shinyapps.io/calculator/)
 
@@ -131,9 +131,9 @@ renv::restore()  # In Calculator/ or Publication/
 
 ## 📖 Citation
 
-**This calculator/model (manuscript in review):**
+**This calculator/model:**
 
-Wagner V, Preston JD, De Leon Castro A, Mueller WF, Nguyen J, Garcia-Toca M, Benjamin ER, Todd SR, Sciarretta JD. A Machine-Learning-Based Tool for Stroke Risk Prediction in Blunt Cerebrovascular Injury: Development and Preliminary Evaluation. *In Review*.
+Wagner V, Preston JD, De Leon Castro A, Mueller WF, Nguyen J, Garcia-Toca M, Benjamin ER, Todd SR, Sciarretta JD. A machine-learning-based tool for stroke risk prediction in blunt cerebrovascular injury: development and preliminary evaluation. Eur J Trauma Emerg Surg. 2026 Apr 10;52(1):123. [doi: 10.1007/s00068-026-03172-x](https://doi.org/10.1007/s00068-026-03172-x). [PMID: 41961261](https://pubmed.ncbi.nlm.nih.gov/41961261/); PMCID: PMC13068730.
 
 **Original cohort study:**
 
@@ -165,7 +165,7 @@ Raw data are **not included** in this repository. A **deidentified dataset** is 
 - **Live Calculator:** [https://grady-bcvi-calc.shinyapps.io/calculator/](https://grady-bcvi-calc.shinyapps.io/calculator/)
 - **GitHub Repository:** [https://github.com/jdpreston30/grady-bcvi-calculator](https://github.com/jdpreston30/grady-bcvi-calculator)
 - **Docker Hub (Pre-built Images):** [https://hub.docker.com/r/jdpreston30/grady-bcvi-calculator](https://hub.docker.com/r/jdpreston30/grady-bcvi-calculator)
-- **Manuscript:** TBD (In Review)
+- **Manuscript:** [Eur J Trauma Emerg Surg. 2026;52(1):123](https://doi.org/10.1007/s00068-026-03172-x)
 - **Original Study:** [Am J Surg 2025;248:116480](https://doi.org/10.1016/j.amjsurg.2025.116480)
 
 ---
