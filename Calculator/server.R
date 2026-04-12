@@ -10,9 +10,9 @@ server <- function(input, output, session) {
   # Text for disclaimer
 
   disclaimer_text <- "<strong>Note: This clinical tool is designed for healthcare professionals and is for informational purposes only.<br>Predictions are estimates based on a model that has not yet been externally validated.<br>Predictions outside the training age range (12-97 years) represent extrapolations and should be interpreted with caution.<br>This tool does not offer medical advice nor guarantee that a specific event will or will not occur.<br>This model is preliminary and is not a replacement for clinical judgement.</strong><br><br>
-    For further details, see the published manuscript associated with this work
-    (<a href='https://pubmed.ncbi.nlm.nih.gov/40555567/' target='_blank'>Wagner et al. 2025</a>;
-    <a href='https://pubmed.ncbi.nlm.nih.gov/41961261/' target='_blank'>Wagner et al. 2026</a>).<br>
+    For further details, see the published manuscripts associated with this work
+    (<a href='https://pubmed.ncbi.nlm.nih.gov/41961261/' target='_blank'>Wagner et al. 2026</a>;
+    <a href='https://pubmed.ncbi.nlm.nih.gov/40555567/' target='_blank'>Wagner et al. 2025</a>).<br>
     The GitHub repository associated with this project can be found
     <a href='https://github.com/jdpreston30/grady-bcvi-calculator' target='_blank'>here</a>.<br>
     *AT = The use of ASA or anticoagulant therapy was consolidated into a binary antithrombotic variable (“AT”) during model development."
