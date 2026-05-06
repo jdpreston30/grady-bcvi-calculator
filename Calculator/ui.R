@@ -1,5 +1,5 @@
 ui <- fluidPage(
-  titlePanel("BCVI Stroke Risk Prediction Tool"),
+  titlePanel("BCVI Stroke Risk Prediction Calculator"),
   radioButtons("view_mode", "View Mode:", choices = c("Mobile" = "mobile", "Desktop" = "desktop"), selected = "mobile", inline = TRUE),
   # uiOutput("auth_ui"), #! replaces uiOutput("dynamic_ui"), remove once public
   uiOutput("dynamic_ui"),  # ← restore this line and remove auth_ui when public
